@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lead Sheet Markup Viewer | Professional Jazz Notation Online</title>
+    <meta name="description"
+        content="A professional-grade web application for viewing and sharing jazz lead sheet markup. Features AI composition, browser-based rendering, and a community forum.">
+    <meta name="keywords" content="jazz, lead sheet, sheet music, music notation, ai music, bebop, forum">
+    <meta name="author" content="donnadonnalee">
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://donnadonnalee.github.io/leadsheetmarkup/">
+    <meta property="og:title" content="Lead Sheet Markup Viewer - Professional Jazz Notation">
+    <meta property="og:description" content="View, share, and compose jazz lead sheets online with AI assistance.">
+    <meta property="og:image" content="https://donnadonnalee.github.io/leadsheetmarkup/assets/og-image.jpg">
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:title" content="Lead Sheet Markup Viewer">
+    <meta property="twitter:description" content="Professional jazz notation in your browser.">
+
+    <!-- Google Fonts: Caveat for Title, Oswald for Chords -->
+    <link
+        href="https://fonts.googleapis.com/css2?family=Caveat:wght@400..700&family=Oswald:wght@200..700&family=Inter:wght@400;700&family=Noto+Music&display=swap"
+        rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body>
+    <!-- Android App Promo Banner -->
+    <div class="app-banner">
+        <div class="banner-content">
+            <span class="banner-icon">📱</span>
+            <span class="banner-text">Get the Android app for offline practice!</span>
+            <a href="https://play.google.com/store/apps/details?id=jp.example.readsheetreader&hl=ja" target="_blank"
+                class="btn btn-small btn-accent">
+                Download on Google Play
+            </a>
+        </div>
+    </div>
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <h1>🎵 Lead Sheet Markup Viewer</h1>
+            <p class="subtitle">Jazz notation in your browser</p>
+        </header>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Editor Panel -->
+            <div class="editor-panel">
+                <div class="panel-header">
+                    <h2>Markup Editor</h2>
+                    <div class="button-group">
+                        <button id="btnSample" class="btn btn-secondary">Load Sample</button>
+                        <button id="btnHelp" class="btn btn-secondary">❓ Help</button>
+                        <button id="btnShareForum" class="btn btn-accent">📤 Share to Forum</button>
+                        <button id="btnClear" class="btn btn-secondary">Clear</button>
+                    </div>
+                </div>
+                <textarea id="markupInput" placeholder="Enter your lead sheet markup here..."></textarea>
+            </div>
+
+            <!-- Sheet Music Display -->
+            <div class="sheet-panel">
+                <div class="panel-header">
+                    <h2>Sheet Music</h2>
+                    <div class="button-group">
+                        <div class="playback-controls"
+                            style="display:flex; align-items:center; gap:10px; margin-right:15px; background:#f5f5f5; padding:4px 10px; border-radius:4px;">
+                            <button id="btnPlay" class="btn btn-small" title="Play">▶</button>
+                            <button id="btnStop" class="btn btn-small" title="Stop">⏹</button>
+                            <div style="display:flex; align-items:center; gap:5px; font-size:12px;">
+                                <label for="bpmSlider">BPM:</label>
+                                <input type="range" id="bpmSlider" min="40" max="240" value="120" style="width:80px;">
+                                <span id="bpmValue">120</span>
+                            </div>
+                            <div style="display:flex; gap:8px; font-size:12px; margin-left:10px;">
+                                <label><input type="checkbox" id="checkMuteMelody"> Mute Mel</label>
+                                <label><input type="checkbox" id="checkMuteChords"> Mute Acc</label>
+                                <label style="margin-left:5px; font-weight:bold; color:#d35400;"><input type="checkbox"
+                                        id="checkJazzMode"> Swing Mode</label>
+                            </div>
+                        </div>
+                        <button id="btnSettings" class="btn btn-secondary">⚙️ Settings</button>
+                        <button id="btnForum" class="btn btn-secondary">🌐 Browse Forum</button>
+                        <button id="btnAI" class="btn btn-primary">🤖 AI Composer</button>
+                    </div>
+                </div>
+                <div class="canvas-container">
+                    <canvas id="sheetCanvas"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Settings Modal -->
+        <div id="settingsModal" class="modal-overlay hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>⚙️ Display Settings</h2>
+                    <button class="btn-close" id="btnCloseSettings">&times;</button>
+                </div>
+                <div class="settings-body" style="padding: 25px;">
+                    <div class="setting-group">
+                        <label for="transposeSelect">Transpose:</label>
+                        <select id="transposeSelect">
+                            <option value="0">No transpose</option>
+                            <option value="1">+1 semitone</option>
+                            <option value="2">+2 semitones</option>
+                            <option value="3">+3 semitones</option>
+                            <option value="4">+4 semitones</option>
+                            <option value="5">+5 semitones</option>
+                            <option value="6">+6 semitones</option>
+                            <option value="-1">-1 semitone</option>
+                            <option value="-2">-2 semitones</option>
+                            <option value="-3">-3 semitones</option>
+                            <option value="-4">-4 semitones</option>
+                            <option value="-5">-5 semitones</option>
+                            <option value="-6">-6 semitones</option>
+                        </select>
+                    </div>
+
+                    <div class="setting-group">
+                        <label>
+                            <input type="checkbox" id="chordOnlyCheck">
+                            Chord Only Mode (No melody)
+                        </label>
+                    </div>
+
+                    <div class="setting-group">
+                        <label style="display: block; font-weight: bold; margin-bottom: 10px;">Chord Notation:</label>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                            <label><input type="checkbox" id="checkUseDelta"> Maj → Δ</label>
+                            <label><input type="checkbox" id="checkUseMinus"> m → -</label>
+                            <label><input type="checkbox" id="checkUsePlus"> aug → +</label>
+                            <label><input type="checkbox" id="checkUsePhi"> m7b5 → Φ</label>
+                            <label><input type="checkbox" id="checkUseDimMinus"> dim → -</label>
+                        </div>
+                    </div>
+
+                    <div class="setting-group">
+                        <label for="lineSpacingSlider">Line Spacing: <span id="lineSpacingValue">1.0</span>x</label>
+                        <input type="range" id="lineSpacingSlider" min="0.5" max="2.0" step="0.1" value="1.0"
+                            style="width:100%">
+                    </div>
+
+                    <div class="setting-group">
+                        <label for="chordSizeSlider">Chord Font Size: <span id="chordSizeValue">32</span>px</label>
+                        <input type="range" id="chordSizeSlider" min="8" max="48" step="1" value="24"
+                            style="width:100%">
+                    </div>
+                </div>
+                <div class="modal-footer" style="padding: 15px 25px; border-top: 1px solid #eee; text-align: right;">
+                    <button class="btn btn-secondary"
+                        onclick="document.getElementById('settingsModal').classList.add('hidden')">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Help Modal -->
+    <div id="helpModal" class="modal-overlay hidden">
+        <div class="modal-content help-modal" style="max-width: 800px; width: 90%;">
+            <div class="modal-header">
+                <h2>Markup Help</h2>
+                <button class="btn-close" id="btnCloseHelp">&times;</button>
+            </div>
+            <div id="helpContent" class="help-body"
+                style="padding: 25px; max-height: 70vh; overflow-y: auto; text-align: left; line-height: 1.6;">
+                Loading help...
+            </div>
+        </div>
+    </div>
+
+    <!-- Forum Modal -->
+    <div id="forumModal" class="modal-overlay hidden">
+        <div class="modal-content forum-modal">
+            <div class="modal-header">
+                <h2>🌐 Sheet Music Forum</h2>
+                <button class="btn-close" id="btnCloseForum">&times;</button>
+            </div>
+            <div class="forum-controls">
+                <input type="text" id="forumSearch" placeholder="Search by title...">
+                <div class="sort-buttons">
+                    <button id="btnSortPopular" class="btn btn-small btn-active">Popular</button>
+                    <button id="btnSortLatest" class="btn btn-small">Latest</button>
+                </div>
+            </div>
+            <div id="forumLoading" class="loading-spinner hidden">Loading...</div>
+            <div id="forumList" class="forum-list">
+                <!-- Song items will be injected here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Video Modal -->
+    <div id="videoModal" class="modal-overlay hidden">
+        <div class="modal-content video-modal">
+            <div class="modal-header">
+                <h2 id="videoModalTitle">Videos</h2>
+                <button class="btn-close" id="btnCloseVideo">&times;</button>
+            </div>
+            <div class="video-controls" style="padding: 15px 25px;">
+                <button id="btnAddVideo" class="btn btn-primary">+ Add YouTube Video</button>
+            </div>
+            <div id="videoList" class="video-list">
+                <!-- Video items will be injected here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- AI Composer Modal -->
+    <div id="aiModal" class="modal-overlay hidden">
+        <div class="modal-content ai-modal">
+            <div class="modal-header">
+                <h2>🤖 AI Composer</h2>
+                <button class="btn-close" id="btnCloseAI">&times;</button>
+            </div>
+            <div class="ai-body" style="padding: 25px;">
+                <p>Select a jazz style to generate a Gemini API prompt:</p>
+                <div class="style-buttons">
+                    <button class="style-btn" data-style="standard">STANDARD</button>
+                    <button class="style-btn" data-style="bebop">BEBOP</button>
+                    <button class="style-btn" data-style="hardbop">HARD BOP</button>
+                    <button class="style-btn" data-style="contemporary">CONTEMPORARY</button>
+                    <button class="style-btn" data-style="modal">MODAL JAZZ</button>
+                </div>
+                <div style="margin-top: 20px; display: flex; gap: 15px; align-items: center;">
+                    <div style="flex: 1;">
+                        <label for="keySelect">Key:</label>
+                        <select id="keySelect"
+                            style="width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ddd; border-radius: 8px;">
+                            <option value="C">C Major</option>
+                            <option value="F">F Major</option>
+                            <option value="Bb">Bb Major</option>
+                            <option value="Eb">Eb Major</option>
+                            <option value="Ab">Ab Major</option>
+                            <option value="Db">Db Major</option>
+                            <option value="Gb">Gb Major</option>
+                            <option value="B">B Major</option>
+                            <option value="E">E Major</option>
+                            <option value="A">A Major</option>
+                            <option value="D">D Major</option>
+                            <option value="G">G Major</option>
+                            <option value="Am">A Minor</option>
+                            <option value="Dm">D Minor</option>
+                            <option value="Gm">G Minor</option>
+                            <option value="Cm">C Minor</option>
+                            <option value="Fm">F Minor</option>
+                            <option value="Bbm">Bb Minor</option>
+                            <option value="Ebm">Eb Minor</option>
+                            <option value="G#m">G# Minor</option>
+                            <option value="C#m">C# Minor</option>
+                            <option value="F#m">F# Minor</option>
+                            <option value="Bm">B Minor</option>
+                            <option value="Em">E Minor</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="densityControl" style="margin-top: 15px;">
+                    <label for="noteDensitySlider">Note Density (音の数): <span id="noteDensityValue">Medium</span></label>
+                    <input type="range" id="noteDensitySlider" min="1" max="5" value="3" step="1" style="width: 100%;">
+                    <div style="display: flex; justify-content: space-between; font-size: 12px; color: #666;">
+                        <span>Few (Long Tones)</span>
+                        <span>Many (Fine)</span>
+                    </div>
+                </div>
+                <div style="margin-top: 15px;">
+                    <label for="customPrompt">Or enter custom prompt:</label>
+                    <input type="text" id="customPrompt" placeholder="e.g., slow ballad in minor"
+                        style="width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ddd; border-radius: 8px;">
+                </div>
+                <div class="dialog-buttons" style="margin-top: 25px; display: flex; gap: 10px;">
+                    <button class="btn btn-primary" id="btnCopyPrompt" style="flex: 2;">Copy Prompt to
+                        Clipboard</button>
+                    <button class="btn btn-secondary"
+                        onclick="document.getElementById('aiModal').classList.add('hidden')"
+                        style="flex: 1;">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast hidden"></div>
+
+    <!-- Firebase SDK (v9 compat) -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+    <!-- Scripts -->
+    <script src="js/models.js"></script>
+    <script src="js/music-utils.js"></script>
+    <script src="js/parser.js"></script>
+    <script src="js/renderer.js"></script>
+    <script src="js/firebase-config.js"></script>
+    <script src="js/forum.js"></script>
+    <script src="js/audio-player.js"></script>
+    <script src="js/app.js"></script>
+</body>
+
+</html>
