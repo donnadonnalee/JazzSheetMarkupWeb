@@ -42,6 +42,10 @@ class SheetMusic {
     constructor() {
         this.title = '';
         this.key = 'C';            // Default key
+        this.composer = '';
+        this.tempo = '';
+        this.meter = '';
+        this.rhythm = '';
         this.measures = [];        // Array of Measure objects
     }
 }

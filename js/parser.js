@@ -11,7 +11,11 @@ const LeadSheetParser = {
      * @returns {SheetMusic} - Parsed sheet music data
      */
     parse(input) {
+        // Preprocess: delete newlines right after markers to prevent empty measures
+        input = input.replace(/(?:\[[^\]]*\]|\|:|\(\d+\))\s*\r?\n/gi, (match) => match.trim() + ' ');
+
         const sheet = new SheetMusic();
+        let keyAccidentals = {};
         const lines = input.split('\n');
         let nextMeasureIsNewLine = false;
 
@@ -37,6 +41,23 @@ const LeadSheetParser = {
             }
             if (lowerLine.startsWith('key:')) {
                 sheet.key = line.substring(4).trim();
+                keyAccidentals = this.getKeyAccidentals(sheet.key);
+                continue;
+            }
+            if (lowerLine.startsWith('composer:')) {
+                sheet.composer = line.substring(9).trim();
+                continue;
+            }
+            if (lowerLine.startsWith('tempo:')) {
+                sheet.tempo = line.substring(6).trim();
+                continue;
+            }
+            if (lowerLine.startsWith('meter:')) {
+                sheet.meter = line.substring(6).trim();
+                continue;
+            }
+            if (lowerLine.startsWith('rhythm:')) {
+                sheet.rhythm = line.substring(7).trim();
                 continue;
             }
 
@@ -108,11 +129,10 @@ const LeadSheetParser = {
             }
 
             // Try to parse notes and chords
-            this.parseMeasureContent(line, measure, i, originalLine);
+            this.parseMeasureContent(line, measure, i, originalLine, keyAccidentals);
 
             // If this line ONLY had markers and NO content (notes/chords/double bar), 
             // carry them over to the next loop iteration.
-            // Note: repeatEnd and isDoubleBar usually signify a measure boundary, so we might keep those.
             const hasContent = measure.notes.length > 0 || measure.chords.length > 0 || measure.repeatEnd || measure.isDoubleBar;
 
             if (!hasContent) {
@@ -137,16 +157,13 @@ const LeadSheetParser = {
             }
         }
 
-        // If something is still pending at the very end, we should probably add a rest measure or just drop it.
-        // Usually, markers without content at the end of a file shouldn't happen or don't render much.
-
         return sheet;
     },
 
     /**
      * Parse measure content (notes and chords)
      */
-    parseMeasureContent(content, measure, lineNumber, originalLine) {
+    parseMeasureContent(content, measure, lineNumber, originalLine, keyAccidentals) {
         // Split by commas, but not inside quotes
         const segments = content.split(/,(?![^"]*"[^"]*")/);
         let currentPos = 0;
@@ -157,8 +174,8 @@ const LeadSheetParser = {
 
             // Pattern: chord in quotes OR note with optional duration
             // Chord: "ChordName"
-            // Note: [lh]{0,2}?[a-gr][+-]?\s*[0-9./]*
-            const pattern = /"([^"]+)"|([lh]{0,2}?[a-gr][+-]?|r)\s*([0-9./]*)/g;
+            // Note: potential ABC notation OR original lc/hc prefix
+            const pattern = /"([^"]+)"|([_^\=]?[a-gA-G][,']*|[lh]{0,2}?[a-gr][+-]?|r)\s*([0-9./]*)/g;
             let match;
 
             while ((match = pattern.exec(segment)) !== null) {
@@ -183,7 +200,7 @@ const LeadSheetParser = {
                     const pitchStr = match[2];
                     const durationStr = match[3];
                     const dr = this.parseDuration(durationStr);
-                    const note = this.createNote(pitchStr, dr.value, dr.tuplet);
+                    const note = this.createNote(pitchStr, dr.value, dr.tuplet, keyAccidentals);
 
                     // Calculate source position
                     const noteText = pitchStr + durationStr;
@@ -244,46 +261,119 @@ const LeadSheetParser = {
     /**
      * Create note from pitch string
      */
-    createNote(pitchStr, duration, tuplet) {
+    createNote(pitchStr, duration, tuplet, keyAccidentals = {}) {
         if (pitchStr === 'r') {
             const note = new Note('r', 0, duration, true);
             note.tupletNumber = tuplet;
             return note;
         }
 
-        let pitch;
-        let accidental = '';
-        let octave = 4;
-        let idx = 0;
+        // Check if ABC notation
+        const isABC = /^[_^\=]?[a-gA-G][,']*$/.test(pitchStr);
 
-        // Parse octave prefix
-        if (pitchStr.startsWith('ll')) {
-            octave = 2;
-            idx = 2;
-        } else if (pitchStr.startsWith('hh')) {
-            octave = 6;
-            idx = 2;
-        } else if (pitchStr.startsWith('l')) {
-            octave = 3;
-            idx = 1;
-        } else if (pitchStr.startsWith('h')) {
-            octave = 5;
-            idx = 1;
-        }
+        if (isABC) {
+            let accidental = '';
+            let idx = 0;
+            const first = pitchStr.charAt(0);
+            if (first === '^') { accidental = '#'; idx++; }
+            else if (first === '_') { accidental = '-'; idx++; }
+            else if (first === '=') { accidental = ''; idx++; }
 
-        pitch = pitchStr.substring(idx, idx + 1);
+            const baseChar = pitchStr.charAt(idx);
+            let octave = (baseChar === baseChar.toUpperCase()) ? 4 : 5;
+            const pitch = baseChar.toLowerCase();
+            idx++;
 
-        // Parse accidental
-        if (pitchStr.length > idx + 1) {
-            const acc = pitchStr.substring(idx + 1);
-            if (acc === '+') {
-                accidental = '#';
-            } else if (acc === '-') {
-                accidental = '-';
+            // Octave markers
+            while (idx < pitchStr.length) {
+                const c = pitchStr.charAt(idx);
+                if (c === ',') octave--;
+                else if (c === '\'') octave++;
+                idx++;
             }
+
+            // Key signature adjustment
+            if (first !== '^' && first !== '_' && first !== '=') {
+                if (keyAccidentals[pitch] !== undefined) {
+                    accidental = keyAccidentals[pitch];
+                }
+            }
+
+            return new Note(pitch, octave, duration, false, accidental, tuplet);
+        } else {
+            // Original Notation (lc, c, hc)
+            let pitch;
+            let accidental = '';
+            let octave = 4;
+            let idx = 0;
+            if (pitchStr.startsWith('ll')) {
+                octave = 2;
+                idx = 2;
+            } else if (pitchStr.startsWith('hh')) {
+                octave = 6;
+                idx = 2;
+            } else if (pitchStr.startsWith('l')) {
+                octave = 3;
+                idx = 1;
+            } else if (pitchStr.startsWith('h')) {
+                octave = 5;
+                idx = 1;
+            }
+            pitch = pitchStr.substring(idx, idx + 1);
+            if (pitchStr.length > idx + 1) {
+                const acc = pitchStr.substring(idx + 1);
+                if (acc === '+')
+                    accidental = '#';
+                else if (acc === '-')
+                    accidental = '-';
+            }
+            return new Note(pitch, octave, duration, false, accidental, tuplet);
+        }
+    },
+
+    getKeyAccidentals(keyName) {
+        const map = {};
+        if (!keyName || keyName.trim() === '')
+            return map;
+
+        let key = keyName.trim().replace("Maj", "").replace("maj", "");
+        const isMinor = key.includes("m") || key.includes("min") || key.endsWith("m");
+        const root = key.replace("m", "").replace("in", "");
+
+        let majorRoot = root;
+        if (isMinor) {
+            const minorToMajor = {
+                "A": "C", "E": "G", "B": "D",
+                "F#": "A", "C#": "E", "G#": "B",
+                "D#": "F#", "A#": "C#",
+                "D": "F", "G": "Bb", "C": "Eb",
+                "F": "Ab", "Bb": "Db", "Eb": "Gb",
+                "Ab": "Cb"
+            };
+            majorRoot = minorToMajor[root] || root;
         }
 
-        return new Note(pitch, octave, duration, false, accidental, tuplet);
+        const majorToSharps = {
+            "C": 0, "G": 1, "D": 2, "A": 3, "E": 4, "B": 5, "F#": 6, "C#": 7
+        };
+
+        const majorToFlats = {
+            "F": 1, "Bb": 2, "Eb": 3, "Ab": 4, "Db": 5, "Gb": 6, "Cb": 7
+        };
+
+        if (majorToSharps[majorRoot] !== undefined) {
+            const count = majorToSharps[majorRoot];
+            const order = [ "f", "c", "g", "d", "a", "e", "b" ];
+            for (let i = 0; i < count; i++)
+                map[order[i]] = "#";
+        } else if (majorToFlats[majorRoot] !== undefined) {
+            const count = majorToFlats[majorRoot];
+            const order = [ "b", "e", "a", "d", "g", "c", "f" ];
+            for (let i = 0; i < count; i++)
+                map[order[i]] = "-";
+        }
+
+        return map;
     }
 };
 

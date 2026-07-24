@@ -224,7 +224,7 @@ class LeadSheetApp {
     }
 
     parseAndRender() {
-        const markup = this.markupInput.value;
+        let markup = this.markupInput.value;
 
         if (!markup.trim()) {
             // Clear canvas if empty
@@ -232,6 +232,13 @@ class LeadSheetApp {
             this.renderer.ctx.fillStyle = '#ffffff';
             this.renderer.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
             return;
+        }
+
+        if (typeof ABCConverter !== 'undefined' && ABCConverter.isABCNotation(markup)) {
+            const converted = ABCConverter.convert(markup);
+            this.markupInput.value = converted;
+            markup = converted;
+            this.showToast('ABC notation converted to markup!');
         }
 
         try {

@@ -14,9 +14,9 @@ class LeadSheetRenderer {
         // Rendering parameters
         this.lineSpacing = 8;  // Space between staff lines
         this.measureWidth = 200;
-        this.marginLeft = 30; // Reduced from 60
-        this.marginTop = 60;  // Slightly reduced from 80
-        this.marginRight = 20; // Reduced from 40
+        this.marginLeft = 30;
+        this.marginTop = 60;
+        this.marginRight = 20;
         this.currentY = this.marginTop;
 
         // Settings (can be changed externally)
@@ -51,6 +51,22 @@ class LeadSheetRenderer {
         this.lineSpacing = 8 * scale;
     }
 
+    getVisualDuration(note) {
+        if (!note.tupletNumber || note.tupletNumber <= 1) {
+            return note.duration;
+        }
+        const n = note.tupletNumber;
+        let temp = n - 1;
+        temp |= temp >> 1;
+        temp |= temp >> 2;
+        temp |= temp >> 4;
+        temp |= temp >> 8;
+        temp |= temp >> 16;
+        let m = (temp + 1) >> 1;
+        if (m === 0) m = 1;
+        return note.duration * n / m;
+    }
+
     /**
      * Main render function
      */
@@ -73,8 +89,6 @@ class LeadSheetRenderer {
         const lineHeight = this.lineSpacing * 12;
 
         // PRE-CALCULATE HEIGHT
-        // We need to estimate how many lines are needed.
-        // Explicit 'nl' (isNewLine) complicates this, so we do a quick pass.
         let estimatedY = this.marginTop + 40;
         let lineCount = 1;
         let mCount = 0;
@@ -100,7 +114,7 @@ class LeadSheetRenderer {
             this.ctx.scale(this.dpr, this.dpr);
         }
 
-        // Clear canvas and draw background AFTER potential resize
+        // Clear canvas and draw background
         this.ctx.clearRect(0, 0, logicalWidth, requiredHeight);
         this.ctx.fillStyle = '#ffffff';
         this.ctx.fillRect(0, 0, logicalWidth, requiredHeight);
@@ -114,7 +128,7 @@ class LeadSheetRenderer {
         let isFirstMeasureInLine = true;
         let measureCounter = 0;
 
-        // Draw title with more spacing
+        // Draw title
         if (this.sheetMusic.title) {
             this.ctx.font = 'bold 36px "Caveat", cursive';
             this.ctx.fillStyle = '#000000';
@@ -122,15 +136,30 @@ class LeadSheetRenderer {
             this.ctx.fillText(this.sheetMusic.title, logicalWidth / 2, 45);
         }
 
+        // Draw Composer (Top Right)
+        if (this.sheetMusic.composer) {
+            this.ctx.font = '14px sans-serif';
+            this.ctx.fillStyle = '#000000';
+            this.ctx.textAlign = 'right';
+            this.ctx.fillText(this.sheetMusic.composer, logicalWidth - this.marginRight, 55);
+        }
+
+        // Draw Tempo / Meter / Rhythm (Top Left)
+        const metaText = [this.sheetMusic.tempo, this.sheetMusic.meter, this.sheetMusic.rhythm].filter(Boolean).join(' ');
+        if (metaText) {
+            this.ctx.font = '14px sans-serif';
+            this.ctx.fillStyle = '#000000';
+            this.ctx.textAlign = 'left';
+            this.ctx.fillText(metaText, this.marginLeft, 55);
+        }
+
         for (let i = 0; i < this.sheetMusic.measures.length; i++) {
             const measure = this.sheetMusic.measures[i];
 
-            // Check for new line (Explicit 'nl' OR every 4 measures)
-            // Note: measureCounter is 0-indexed count on current line (0, 1, 2, 3)
             const autoLineBreak = !measure.isNewLine && measureCounter >= 4;
 
             if (measure.isNewLine || isFirstMeasureInLine || autoLineBreak) {
-                if (!isFirstMeasureInLine) { // Don't move down for the very first line
+                if (!isFirstMeasureInLine) {
                     this.currentY += lineHeight;
                 }
 
@@ -141,28 +170,20 @@ class LeadSheetRenderer {
 
                 // Draw Clef and Key Signature at start of line
                 if (!this.chordOnlyMode) {
-                    // Draw staff background for header area (Clef + KeySig)
-                    // Fixed width for header area: Clef(40) + KeySig + Padding
-                    // Simply calculate positions
-
-                    // Draw Clef
-                    this.drawStaff(currentX, this.currentY, 40); // Backup staff for clef
+                    this.drawStaff(currentX, this.currentY, 40);
                     this.drawClef(currentX, this.currentY);
                     currentX += 40;
 
-                    // Draw Key Signature
                     const keySigWidth = this.drawKeySignature(keySF, currentX, this.currentY);
-                    this.drawStaff(currentX, this.currentY, keySigWidth + 10); // Backup staff for key sig
+                    this.drawStaff(currentX, this.currentY, keySigWidth + 10);
                     currentX += keySigWidth + 10;
                 } else {
-                    currentX += 20; // Indent for chord only mode
+                    currentX += 20;
                 }
             }
 
-            // Determine if this is the last measure of the piece
             const isPieceEnd = (i === this.sheetMusic.measures.length - 1);
 
-            // Draw the measure (Staff lines will be drawn inside drawMeasure)
             this.drawMeasure(measure, currentX, this.currentY, this.measureWidth, i, isPieceEnd, keySF);
 
             currentX += this.measureWidth;
@@ -203,10 +224,9 @@ class LeadSheetRenderer {
     drawKeySignature(sf, x, y) {
         if (sf === 0) return 0;
 
-        const symbol = sf > 0 ? '#' : '♭';
+        const symbol = sf > 0 ? '♯' : '♭';
         const count = Math.abs(sf);
 
-        // Positions for sharps/flats on staff (line numbers from bottom)
         const sharpPositions = [4, 2.5, 4.5, 3, 1.5, 3.5, 2]; // F C G D A E B
         const flatPositions = [2, 3.5, 2.5, 4, 3, 4.5, 4]; // B E A D G C F
         const positions = sf > 0 ? sharpPositions : flatPositions;
@@ -226,30 +246,22 @@ class LeadSheetRenderer {
     /**
      * Draw a single measure
      */
-    /**
-     * Draw a single measure
-     */
     drawMeasure(measure, x, y, width, index, isPieceEnd, keySF) {
         const staffTopY = y;
 
-        // Draw staff lines for this measure (if not chord only)
         if (!this.chordOnlyMode) {
             this.drawStaff(x, y, width);
         }
 
-        const staffBottomY = y + this.lineSpacing * 4;
-
-        // Calculate total duration for proportional spacing
         let totalDuration = 0;
         for (const note of measure.notes) {
             totalDuration += note.duration;
         }
-        if (totalDuration === 0) totalDuration = 4; // Default validation
+        if (totalDuration === 0) totalDuration = 4;
 
-        let contentStartX = x + 10; // Left padding (Reduced from 20)
-        let contentWidth = width - 20; // Total width minus padding (Reduced from 40)
+        let contentStartX = x + 10;
+        let contentWidth = width - 20;
 
-        // Adjust for repeat signs to prevent overlap
         if (measure.repeatStart) {
             contentStartX += 15;
             contentWidth -= 15;
@@ -275,29 +287,50 @@ class LeadSheetRenderer {
 
         // Draw chords
         for (const chord of measure.chords) {
-            // Use same proportional logic for chords
             const chordX = contentStartX + (chord.position / totalDuration) * contentWidth;
             const transposedChord = this.getTransposedChord(chord.chord, keySF);
             const formattedChord = this.formatChord(transposedChord);
             this.drawChord(formattedChord, chordX, staffTopY - 30);
         }
 
-        // Draw notes (unless chord-only mode)
+        // Draw notes
         if (!this.chordOnlyMode) {
             const noteInfos = [];
-            // Track cumulative duration for positioning
             let currentDurationPos = 0;
 
-            // First pass: collect note information
+            // Accidental state management within measure
+            const measureAccidentalState = new Map();
+            const keyAccidentals = this.getKeyAccidentals(keySF);
+
             for (const note of measure.notes) {
-                // Calculate proportional X
                 const noteX = contentStartX + (currentDurationPos / totalDuration) * contentWidth;
 
                 if (!note.isRest) {
                     const transposed = this.getTransposedPitch(note, keySF);
                     const { y: noteY, staffPosition } = this.calculateNoteY(transposed.step, transposed.octave, staffTopY);
-                    const isDotted = this.isDottedDuration(note.duration);
+                    
+                    const visualDur = this.getVisualDuration(note);
+                    const isDotted = this.isDottedDuration(visualDur);
                     const stemUp = noteY > staffTopY + this.lineSpacing * 2;
+
+                    // Accidental display decision
+                    const stepIdx = { 'c': 0, 'd': 1, 'e': 2, 'f': 3, 'g': 4, 'a': 5, 'b': 6 }[transposed.step.toLowerCase()] || 0;
+                    const pitchKey = transposed.octave * 7 + stepIdx;
+
+                    let currentState;
+                    if (measureAccidentalState.has(pitchKey)) {
+                        currentState = measureAccidentalState.get(pitchKey);
+                    } else {
+                        currentState = keyAccidentals[stepIdx];
+                    }
+
+                    let displayAcc = '';
+                    if (transposed.accidental !== currentState) {
+                        if (transposed.accidental === 1) displayAcc = '#';
+                        else if (transposed.accidental === -1) displayAcc = '-';
+                        else displayAcc = 'natural';
+                        measureAccidentalState.set(pitchKey, transposed.accidental);
+                    }
 
                     noteInfos.push({
                         note,
@@ -307,6 +340,7 @@ class LeadSheetRenderer {
                         transposed,
                         isDotted,
                         stemUp,
+                        displayAcc,
                         isRest: false
                     });
                 } else {
@@ -325,10 +359,9 @@ class LeadSheetRenderer {
             // Second pass: detect beams
             const beamGroups = this.detectBeamGroups(noteInfos);
 
-            // NEW: Unify stem directions for notes in beam groups
+            // Unify stem directions for notes in beam groups
             const centerY = staffTopY + this.lineSpacing * 2;
             for (const beamGroup of beamGroups) {
-                // Calculate average Y position to decide common stem direction
                 let sumY = 0;
                 let count = 0;
                 for (const idx of beamGroup) {
@@ -340,7 +373,6 @@ class LeadSheetRenderer {
 
                 if (count > 0) {
                     const avgY = sumY / count;
-                    // avgY > centerY means the average note is lower on the staff (higher Y), so stems should go UP
                     const commonStemUp = avgY > centerY;
 
                     for (const idx of beamGroup) {
@@ -349,51 +381,43 @@ class LeadSheetRenderer {
                 }
             }
 
-            // Third pass: draw notes with beams
+            // Third pass: draw notes
             for (let i = 0; i < noteInfos.length; i++) {
                 const info = noteInfos[i];
                 const note = info.note;
+                const visualDur = this.getVisualDuration(note);
 
                 if (info.isRest) {
-                    this.drawRest(note.duration, info.x, staffTopY);
+                    this.drawRest(visualDur, info.x, staffTopY);
                 } else {
-                    // Draw accidental if needed
-                    if (info.transposed.displayAcc) {
-                        this.drawAccidental(info.transposed.displayAcc, info.x - 9, info.y);
+                    if (info.displayAcc) {
+                        this.drawAccidental(info.displayAcc, info.x - 9, info.y);
                     }
 
-                    // Draw note head with dot if needed
-                    this.drawNoteHead(note.duration, info.x, info.y, info.isDotted);
+                    this.drawNoteHead(visualDur, info.x, info.y, info.isDotted);
 
-                    // Draw ledger lines
                     if (info.staffPosition <= -2) {
-                        // Below staff (C4 and lower)
                         for (let pos = -2; pos >= info.staffPosition; pos -= 2) {
                             const ledgerY = staffTopY + this.lineSpacing * 4 - (pos * this.lineSpacing / 2);
                             this.drawLedgerLine(info.x, ledgerY);
                         }
                     } else if (info.staffPosition >= 10) {
-                        // Above staff (A5 and higher)
                         for (let pos = 10; pos <= info.staffPosition; pos += 2) {
                             const ledgerY = staffTopY + this.lineSpacing * 4 - (pos * this.lineSpacing / 2);
                             this.drawLedgerLine(info.x, ledgerY);
                         }
                     }
 
-                    // Draw stem for all notes except whole notes (duration < 4)
-                    if (note.duration < 4) {
+                    if (visualDur < 3.99) {
                         const stemHeight = this.lineSpacing * 3.5;
                         this.drawStem(info.x, info.y, stemHeight, info.stemUp);
 
-                        // Check if this note is part of a beam group
                         const beamGroup = beamGroups.find(g => g.includes(i));
 
-                        if (beamGroup && note.duration <= 0.5) {
-                            // Will be drawn as part of beam
-                            // Don't draw flags individually
-                        } else if (note.duration <= 0.5) {
-                            // Draw individual flag
-                            this.drawFlag(info.x, info.y, stemHeight, info.stemUp, note.duration);
+                        if (beamGroup && visualDur <= 0.5) {
+                            // Beam draws it
+                        } else if (visualDur <= 0.5) {
+                            this.drawFlag(info.x, info.y, stemHeight, info.stemUp, visualDur);
                         }
                     }
                 }
@@ -404,33 +428,34 @@ class LeadSheetRenderer {
                 this.drawBeam(noteInfos, beamGroup, staffTopY);
             }
 
-            // Draw tuplet brackets if needed
+            // Draw tuplet brackets
             this.drawTupletBrackets(noteInfos, staffTopY);
         }
 
-        // Draw bar line at end (adjust -2 to ensure visibility inside canvas and within fixed width)
         this.drawBarLines(measure, x + width - 2, staffTopY, isPieceEnd);
+    }
+
+    getKeyAccidentals(keySF) {
+        const accs = Array(7).fill(0);
+        if (keySF > 0) {
+            const order = [3, 0, 4, 1, 5, 2, 6];
+            for (let i = 0; i < keySF && i < 7; i++)
+                accs[order[i]] = 1;
+        } else if (keySF < 0) {
+            const order = [6, 2, 5, 1, 4, 0, 3];
+            for (let i = 0; i < Math.abs(keySF) && i < 7; i++)
+                accs[order[i]] = -1;
+        }
+        return accs;
     }
 
     /**
      * Calculate Y position for a note based on pitch
      */
     calculateNoteY(step, octave, staffTopY) {
-        // Map pitch to position on staff
-        // Middle C (C4) is on first ledger line below staff
         const pitchMap = { 'c': 0, 'd': 1, 'e': 2, 'f': 3, 'g': 4, 'a': 5, 'b': 6 };
         const stepNum = pitchMap[step.toLowerCase()] || 0;
-
-        // Calculate position relative to C4
-        const positionFromC4 = (octave - 4) * 7 + stepNum;
-
-        // C4 is at position -1 from bottom staff line (first ledger line below)
-        // Bottom staff line is 0, each line/space up is +1
-        // ADJUSTED: Lower by one octave (octave - 5 instead of octave - 4)
-        // staffPosition 0 is the bottom line (E4)
-        // staffPosition -2 is C4 (middle C)
         const staffPosition = ((octave - 5) * 7 + stepNum) + 5;
-
         const y = staffTopY + this.lineSpacing * 4 - (staffPosition * this.lineSpacing / 2);
         return { y, staffPosition };
     }
@@ -458,28 +483,20 @@ class LeadSheetRenderer {
         const width = 9;
         const height = 6;
 
-        // Correct duration thresholds:
-        // duration >= 2 → Whole note (hollow, no stem later)
-        // duration > 1 AND < 2 → Half note (hollow with stem) - e.g., 1.5 for dotted half
-        // duration <= 1 → Quarter and shorter (filled with stem)
         if (duration > 2) {
-            // Whole note - hollow oval, no stem (includes dotted whole: 3)
             this.ctx.beginPath();
             this.ctx.ellipse(x, y, width / 2, height / 2, 0, 0, Math.PI * 2);
             this.ctx.stroke();
-        } else if (duration >= 2) {
-            // Half note - hollow oval with stem (includes dotted half: 1.5)
+        } else if (duration >= 1.99) {
             this.ctx.beginPath();
             this.ctx.ellipse(x, y, width / 2, height / 2, 0, 0, Math.PI * 2);
             this.ctx.stroke();
         } else {
-            // Quarter note and shorter - filled oval with stem (duration <= 1)
             this.ctx.beginPath();
             this.ctx.ellipse(x, y, width / 2, height / 2, 0, 0, Math.PI * 2);
             this.ctx.fill();
         }
 
-        // Draw dot if dotted note
         if (isDotted) {
             this.ctx.beginPath();
             this.ctx.arc(x + 10, y, 2, 0, Math.PI * 2);
@@ -506,16 +523,16 @@ class LeadSheetRenderer {
     }
 
     /**
-     * Draw flag for eighth/sixteenth notes (larger size)
+     * Draw flag for eighth/sixteenth notes
      */
     drawFlag(x, y, stemHeight, up, duration) {
-        const flagCount = duration <= 0.25 ? 2 : 1; // Two flags for sixteenth, one for eighth
+        const flagCount = duration <= 0.26 ? 2 : 1;
 
         this.ctx.strokeStyle = '#000000';
         this.ctx.lineWidth = 2.5;
         this.ctx.lineCap = 'round';
 
-        const flagSize = 15; // Increased from 8 to 15
+        const flagSize = 15;
 
         for (let i = 0; i < flagCount; i++) {
             this.ctx.beginPath();
@@ -530,7 +547,7 @@ class LeadSheetRenderer {
             }
             this.ctx.stroke();
         }
-        this.ctx.lineCap = 'butt'; // Reset
+        this.ctx.lineCap = 'butt';
     }
 
     /**
@@ -542,20 +559,18 @@ class LeadSheetRenderer {
         this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'middle';
 
-        let symbol = '𝄽'; // Quarter rest (default)
-        if (duration >= 4) symbol = '𝄻'; // Whole rest
-        else if (duration >= 2) symbol = '𝄼'; // Half rest
-        else if (duration <= 0.5) symbol = '𝄾'; // Eighth rest
-        else if (duration <= 0.25) symbol = '𝄿'; // Sixteenth rest
+        let symbol = '𝄽';
+        if (duration >= 3.99) symbol = '𝄻';
+        else if (duration >= 1.99) symbol = '𝄼';
+        else if (duration <= 0.26) symbol = '𝄿';
+        else if (duration <= 0.51) symbol = '𝄾';
 
-        // Positioning adjustment: blocks (whole/half) sit differently than shaped rests (quarter/eighth)
-        // Shift quarter and shorter rests down to center them on the staff
-        const verticalOffset = (duration >= 2) ? 0 : this.lineSpacing * 2;
+        const verticalOffset = (duration >= 1.99) ? 0 : this.lineSpacing * 2;
         this.ctx.fillText(symbol, x, y + verticalOffset);
     }
 
     /**
-     * Draw accidental (sharp, flat, natural)
+     * Draw accidental
      */
     drawAccidental(accidental, x, y) {
         this.ctx.font = '24px "Noto Music", serif';
@@ -563,7 +578,7 @@ class LeadSheetRenderer {
         this.ctx.textAlign = 'center';
 
         let symbol = '';
-        if (accidental === '+' || accidental === '#') symbol = '#';
+        if (accidental === '+' || accidental === '#') symbol = '♯';
         else if (accidental === '-') symbol = '♭';
         else if (accidental === 'natural') symbol = '♮';
 
@@ -571,7 +586,7 @@ class LeadSheetRenderer {
     }
 
     /**
-     * Draw chord symbol with dual font sizes (Root is full size, Quality is 70%)
+     * Draw chord symbol
      */
     drawChord(chord, x, y) {
         const rootRegex = /^([A-G][#b♯♭♮]?)(.*)$/;
@@ -581,21 +596,17 @@ class LeadSheetRenderer {
             const root = match[1];
             const quality = match[2];
 
-            // Draw Root
             this.ctx.font = `${this.chordFontSize}px "Oswald", sans-serif`;
             this.ctx.fillStyle = '#000000';
             this.ctx.textAlign = 'left';
             this.ctx.fillText(root, x, y);
 
-            // Draw Quality at 70% size
             if (quality) {
                 const rootWidth = this.ctx.measureText(root).width;
                 this.ctx.font = `${Math.round(this.chordFontSize * 0.7)}px "Oswald", sans-serif`;
-                // Slight vertical offset (optional) - usually baseline is fine, but can adjust if needed
                 this.ctx.fillText(quality, x + rootWidth, y);
             }
         } else {
-            // Fallback for non-standard chords
             this.ctx.font = `${this.chordFontSize}px "Oswald", sans-serif`;
             this.ctx.fillStyle = '#000000';
             this.ctx.textAlign = 'left';
@@ -607,33 +618,27 @@ class LeadSheetRenderer {
      * Format chord notation based on settings
      */
     formatChord(chord) {
-        // Apply notation preferences
         let formatted = chord;
 
-        // Maj -> Δ
         if (this.useDelta) {
             formatted = formatted.replace(/(Maj7|M7|maj7|Maj|maj)/g, 'Δ');
         }
 
-        // m -> -
         if (this.useMinus) {
             formatted = formatted.replace(/m7/g, '-7');
             formatted = formatted.replace(/m(?!\d|aj|Δ)/g, '-');
         }
 
-        // aug -> +
         if (this.usePlus) {
             formatted = formatted.replace(/aug/g, '+');
         }
 
-        // m7b5 -> Φ
         if (this.usePhi) {
             formatted = formatted.replace(/m7-5/g, 'Φ');
             formatted = formatted.replace(/m7b5/g, 'Φ');
             formatted = formatted.replace(/-7-5/g, 'Φ');
         }
 
-        // dim -> -
         if (this.useDimMinus) {
             formatted = formatted.replace(/dim/g, '-');
         }
@@ -649,8 +654,6 @@ class LeadSheetRenderer {
         this.ctx.lineWidth = 1.5;
 
         if (measure.repeatEnd) {
-            // Repeat end: dots + thin + thick
-            // One thin line (1.5px) and one thick line (3px)
             this.ctx.lineWidth = 1.5;
             this.ctx.beginPath();
             this.ctx.moveTo(x - 4, y);
@@ -663,14 +666,12 @@ class LeadSheetRenderer {
             this.ctx.lineTo(x, y + this.lineSpacing * 4);
             this.ctx.stroke();
 
-            // Dots
             this.ctx.fillStyle = '#000000';
             this.ctx.beginPath();
             this.ctx.arc(x - 8, y + this.lineSpacing, 2, 0, Math.PI * 2);
             this.ctx.arc(x - 8, y + this.lineSpacing * 3, 2, 0, Math.PI * 2);
             this.ctx.fill();
         } else if (isPieceEnd) {
-            // Final barline: thin + thick
             this.ctx.lineWidth = 1.5;
             this.ctx.beginPath();
             this.ctx.moveTo(x - 4, y);
@@ -683,7 +684,6 @@ class LeadSheetRenderer {
             this.ctx.lineTo(x, y + this.lineSpacing * 4);
             this.ctx.stroke();
         } else if (measure.isDoubleBar) {
-            // Double bar: thin + thin
             this.ctx.lineWidth = 1.5;
             this.ctx.beginPath();
             this.ctx.moveTo(x - 4, y);
@@ -696,7 +696,6 @@ class LeadSheetRenderer {
             this.ctx.lineTo(x, y + this.lineSpacing * 4);
             this.ctx.stroke();
         } else {
-            // Single bar line
             this.ctx.lineWidth = 1.5;
             this.ctx.beginPath();
             this.ctx.moveTo(x, y);
@@ -722,7 +721,6 @@ class LeadSheetRenderer {
         this.ctx.lineTo(x + 4, y + this.lineSpacing * 4);
         this.ctx.stroke();
 
-        // Dots
         this.ctx.fillStyle = '#000000';
         this.ctx.beginPath();
         this.ctx.arc(x + 8, y + this.lineSpacing, 2, 0, Math.PI * 2);
@@ -731,20 +729,18 @@ class LeadSheetRenderer {
     }
 
     /**
-     * Draw volta bracket (ending bracket)
+     * Draw volta bracket
      */
     drawVoltaBracket(x, y, width, number) {
         this.ctx.strokeStyle = '#000000';
         this.ctx.lineWidth = 1.5;
 
-        // Bracket
         this.ctx.beginPath();
         this.ctx.moveTo(x, y + 10);
         this.ctx.lineTo(x, y);
         this.ctx.lineTo(x + width, y);
         this.ctx.stroke();
 
-        // Number
         this.ctx.font = '14px sans-serif';
         this.ctx.fillStyle = '#000000';
         this.ctx.fillText(number.toString() + '.', x + 5, y + 10);
@@ -768,7 +764,6 @@ class LeadSheetRenderer {
                     tupletNotes.push(info);
                 }
             } else if (tupletStart) {
-                // End of tuplet group
                 this.drawTupletBracket(
                     tupletStart.x,
                     noteInfos[i - 1].x,
@@ -780,7 +775,6 @@ class LeadSheetRenderer {
             }
         }
 
-        // Draw last tuplet if exists
         if (tupletStart && tupletNotes.length > 0) {
             this.drawTupletBracket(
                 tupletStart.x,
@@ -798,7 +792,6 @@ class LeadSheetRenderer {
         this.ctx.strokeStyle = '#000000';
         this.ctx.lineWidth = 1;
 
-        // Bracket
         this.ctx.beginPath();
         this.ctx.moveTo(startX, y + 5);
         this.ctx.lineTo(startX, y);
@@ -806,21 +799,16 @@ class LeadSheetRenderer {
         this.ctx.lineTo(endX, y + 5);
         this.ctx.stroke();
 
-        // Number
         this.ctx.font = '12px sans-serif';
         this.ctx.fillStyle = '#000000';
         this.ctx.textAlign = 'center';
         this.ctx.fillText(number.toString(), (startX + endX) / 2, y - 2);
     }
 
-    /**
-     * Check if duration represents a dotted note
-     */
     isDottedDuration(duration) {
-        // Common dotted note durations: 3, 1.5, 0.75, 0.375
-        const dottedValues = [3, 1.5, 0.75, 0.375];
+        const dottedValues = [3, 1.5, 0.75, 0.375, 6.0];
         for (const val of dottedValues) {
-            if (Math.abs(duration - val) < 0.001) {
+            if (Math.abs(duration - val) < 0.05) {
                 return true;
             }
         }
@@ -832,34 +820,60 @@ class LeadSheetRenderer {
      */
     detectBeamGroups(noteInfos) {
         const beamGroups = [];
-        let currentGroup = [];
-
-        for (let i = 0; i < noteInfos.length; i++) {
+        let i = 0;
+        while (i < noteInfos.length) {
             const info = noteInfos[i];
+            const visualDur = this.getVisualDuration(info.note);
+            if (info.isRest || visualDur >= 0.99) {
+                i++;
+                continue;
+            }
 
-            if (info.isRest) {
-                // Rest breaks the beam
-                if (currentGroup.length >= 2) {
-                    beamGroups.push([...currentGroup]);
+            let beamEnd = i;
+            let beamDur = 0;
+            const firstTuplet = info.note.tupletNumber || 0;
+
+            let notePos = 0;
+            for (let k = 0; k < i; k++) {
+                notePos += noteInfos[k].note.duration;
+            }
+
+            for (let j = i + 1; j < noteInfos.length; j++) {
+                const n = noteInfos[j];
+                const nVisualDur = this.getVisualDuration(n.note);
+                if (n.isRest || nVisualDur >= 0.99) {
+                    break;
                 }
-                currentGroup = [];
-            } else if (info.note.duration <= 0.5 && !info.isDotted) {
-                // Eighth note or shorter (not dotted) can be beamed
-                currentGroup.push(i);
+
+                beamDur += noteInfos[j - 1].note.duration;
+
+                if (firstTuplet > 0) {
+                    if ((n.note.tupletNumber || 0) !== firstTuplet) {
+                        break;
+                    }
+                    if (beamDur >= 0.99) {
+                        break;
+                    }
+                } else {
+                    const posMod = (notePos + beamDur) % 1.0;
+                    if (beamDur >= 1.0 || posMod < 0.05 || posMod > 0.95) {
+                        break;
+                    }
+                }
+                beamEnd = j;
+            }
+
+            if (beamEnd > i) {
+                const group = [];
+                for (let k = i; k <= beamEnd; k++) {
+                    group.push(k);
+                }
+                beamGroups.push(group);
+                i = beamEnd + 1;
             } else {
-                // Other durations break the beam
-                if (currentGroup.length >= 2) {
-                    beamGroups.push([...currentGroup]);
-                }
-                currentGroup = [];
+                i++;
             }
         }
-
-        // Don't forget the last group
-        if (currentGroup.length >= 2) {
-            beamGroups.push([...currentGroup]);
-        }
-
         return beamGroups;
     }
 
@@ -872,15 +886,12 @@ class LeadSheetRenderer {
         const firstNote = noteInfos[beamGroup[0]];
         const lastNote = noteInfos[beamGroup[beamGroup.length - 1]];
 
-        // Determine stem direction (use the first note's direction)
         const stemUp = firstNote.stemUp;
         const stemHeight = this.lineSpacing * 3.5;
 
-        // Calculate beam positions
         const beamY1 = stemUp ? firstNote.y - stemHeight : firstNote.y + stemHeight;
         const beamY2 = stemUp ? lastNote.y - stemHeight : lastNote.y + stemHeight;
 
-        // Draw primary beam (for eighth notes)
         this.ctx.strokeStyle = '#000000';
         this.ctx.lineWidth = 3;
         this.ctx.lineCap = 'butt';
@@ -890,28 +901,24 @@ class LeadSheetRenderer {
         this.ctx.lineTo(lastNote.x + (stemUp ? 4 : -4), beamY2);
         this.ctx.stroke();
 
-        // Check if we need secondary beams for sixteenth notes
-        const hasSixteenth = beamGroup.some(idx => noteInfos[idx].note.duration <= 0.25);
+        const hasSixteenth = beamGroup.some(idx => this.getVisualDuration(noteInfos[idx].note) <= 0.26);
 
         if (hasSixteenth) {
-            // Calculate beam angle from primary beam for alignment
             const beamAngle = (beamY2 - beamY1) / (lastNote.x - firstNote.x);
             const beamOffset = stemUp ? 4 : -4;
 
             for (let i = 0; i < beamGroup.length; i++) {
                 const idx = beamGroup[i];
                 const note = noteInfos[idx];
+                const visualDur = this.getVisualDuration(note.note);
 
-                if (note.note.duration <= 0.25) {
+                if (visualDur <= 0.26) {
                     const currentX = note.x + (stemUp ? 4 : -4);
-                    // Use beam angle to calculate secondary beam Y position
                     const relativeX = note.x - firstNote.x;
                     const primaryBeamY = beamY1 + beamAngle * relativeX;
                     const secondaryBeamY = primaryBeamY + beamOffset;
 
-                    // Determine if we should connect to next or previous note
-                    if (i < beamGroup.length - 1 && noteInfos[beamGroup[i + 1]].note.duration <= 0.25) {
-                        // Connect to next sixteenth note
+                    if (i < beamGroup.length - 1 && this.getVisualDuration(noteInfos[beamGroup[i + 1]].note) <= 0.26) {
                         const nextIdx = beamGroup[i + 1];
                         const nextNote = noteInfos[nextIdx];
                         const nextX = nextNote.x + (stemUp ? 4 : -4);
@@ -923,12 +930,11 @@ class LeadSheetRenderer {
                         this.ctx.moveTo(currentX, secondaryBeamY);
                         this.ctx.lineTo(nextX, nextSecondaryBeamY);
                         this.ctx.stroke();
-                    } else if (i > 0 && noteInfos[beamGroup[i - 1]].note.duration <= 0.25) {
-                        // Already drawn in previous iteration
+                    } else if (i > 0 && this.getVisualDuration(noteInfos[beamGroup[i - 1]].note) <= 0.26) {
+                        // Drawn in previous iteration
                     } else {
-                        // Isolated sixteenth - draw short beam stub extending RIGHT
                         const stubLength = 10;
-                        const stubEndX = currentX + stubLength; // Always extend to the right
+                        const stubEndX = currentX + stubLength;
                         const stubRelativeX = (note.x + stubLength) - firstNote.x;
                         const stubPrimaryBeamY = beamY1 + beamAngle * stubRelativeX;
                         const stubSecondaryBeamY = stubPrimaryBeamY + beamOffset;
@@ -943,9 +949,6 @@ class LeadSheetRenderer {
         }
     }
 
-    /**
-     * Get note width based on duration
-     */
     getNoteWidth(duration) {
         if (duration >= 2) return 40;
         if (duration >= 1) return 30;
@@ -953,13 +956,9 @@ class LeadSheetRenderer {
         return 15;
     }
 
-    /**
-     * Get current key signature (sharps/flats count)
-     */
     getCurrentKeySharpsFlats() {
         if (!this.sheetMusic || !this.sheetMusic.key) return 0;
 
-        // Get transposed key name
         const key = MusicUtils.transposeKeyName(this.sheetMusic.key, this.transposeOffset);
 
         const keyMap = {
@@ -980,34 +979,25 @@ class LeadSheetRenderer {
         return keyMap[key] || 0;
     }
 
-    /**
-     * Transpose chord based on current transpose offset
-     */
     getTransposedChord(chord, keySF) {
         return MusicUtils.transposeChord(chord, this.transposeOffset);
     }
 
-    /**
-     * Get transposed pitch information for a note
-     */
     getTransposedPitch(note, keySF) {
         if (note.isRest) {
             return { octave: 0, step: 'r', accidental: 0, displayAcc: '' };
         }
 
-        // Apply transpose
         const pitchStr = note.pitch + (note.accidental === '#' ? '+' : note.accidental === '-' ? '-' : '');
         const octavePrefix = note.octave === 2 ? 'll' : note.octave === 3 ? 'l' : note.octave === 5 ? 'h' : note.octave === 6 ? 'hh' : '';
         const fullPitch = octavePrefix + pitchStr;
 
         const transposed = MusicUtils.transposePitch(fullPitch, this.transposeOffset);
 
-        // Parse transposed result
         let step = 'c';
         let octave = 4;
         let accidental = '';
 
-        // Parse octave prefix
         let idx = 0;
         if (transposed.startsWith('ll')) {
             octave = 2; idx = 2;
@@ -1025,7 +1015,6 @@ class LeadSheetRenderer {
             accidental = transposed[idx + 1] === '+' ? '#' : '-';
         }
 
-        // Compare with key signature to decide if we need to display it
         const expectedAcc = MusicUtils.getAccidentalInKey(step, keySF);
         const actualAccValue = (accidental === '#' ? 1 : accidental === '-' ? -1 : 0);
 
@@ -1045,7 +1034,6 @@ class LeadSheetRenderer {
     }
 }
 
-// Export for use in other modules
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = LeadSheetRenderer;
 }
