@@ -584,141 +584,57 @@ key:Dm
     }
 
     buildGeminiPrompt(style, key, density) {
-        // This is a simplified version of AIComposer.java's buildPrompt
-        const basePrompt = `You are a jazz auto-composition engine.
+        const styleInstruction = style.startsWith('CUSTOM:') ? style.substring(7) : this.getStyleBlock(style);
+        const densityInstruction = this.getDensityInstruction(style, density);
 
-Follow the rules strictly and output only the lead sheet data.
-This is about creation and composition. Avoid safe choices like using only long tones and only the root note—absolutely avoid that.
+        return `You are a jazz composition engine.
+Compose a creative, authentic jazz lead sheet in standard ABC notation.
 
-${this.getStyleBlock(style)}
+Key: ${key}
+${styleInstruction}
+${densityInstruction ? 'Density: ' + densityInstruction : ''}
 
-${this.getDensityInstruction(style, density)}
-
-FORMAT RULES:
-- 1 line = 1 measure. Always break the line after each measure.
-- Never insert extra line breaks inside a measure.
-- Chords are written inside quotes, like "G7" or "Cm7".
-- A single measure MAY contain multiple chord symbols if harmonically appropriate.
-  (example:"Dm7"f0.5 g0.5 a0.5 b-0.5 "G7" b0.5 g0.5 f0.5 e-0.5)
-- When multiple chords appear in one measure, they share the same 4-beat duration.
-- Section labels are [A], [B], [C].
-- Do NOT use barlines, nl, or any symbols other than those defined.
-
-PITCH RULES:
-- Allowed pitch names: lc, ld, le, lf, lg, la, lb, c, d, e, f, g, a, b, hc, hd, he, hf, hg, ha, hb
-- Rest = r
-- Sharp = +, Flat = -
-- These are absolute pitch names. Always write accidentals explicitly.
-
-IMPORTANT:
-- Always compose the song in the specified key.
-- Key = ${key}
-- Do NOT use any accidentals unless they are chromatic approach tones or appropriate for the key.
-
-DURATION RULES:
-- After each pitch name (or rest "r"), write a numeric duration.
-- Example: c0.5 g1 e-0.5 e1/3 g1/3 b-1/3 hd0.5 c+0.5
-- Allowed durations: 0.5, 1, 2, 1/3
-- IMPORTANT: The sum of durations in ONE measure MUST be exactly 4.
-
-STRUCTURE RULES:
-- Total length ≤ 48 measures.
-- Form = AABA or ABAC.
-- Each section normally 8 measures (max 12).
-
-METADATA:
-- title: (Generate a creative and evocative jazz song title)
-- key: ${key}
-
-OUTPUT:
-- Output only the music data in the defined format.
-- No explanations or comments.`;
-
-        return basePrompt;
+ABC NOTATION RULES:
+- Include tags: T: [Evocative Title], K: ${key}, M: 4/4, L: 1/8.
+- Chords in quotes before notes (e.g., "Dm7" D2 F2 "G7" B2 G2 | "Cmaj7" E4 z4 |).
+- Ensure 8 eighth notes (or equivalent) per 4/4 bar.
+- Length: 16 to 32 measures (AABA or ABAC).
+- Use syncopation, rests (z), triplets (3, and chromatic approach tones.
+- Output ONLY raw ABC notation code (no markdown \`\`\`, no explanations).`;
     }
 
     getStyleBlock(style) {
-        if (style.startsWith('CUSTOM:')) {
-            return 'STYLE: ' + style.substring(7);
+        switch (style) {
+            case 'bebop':
+                return `Style: BEBOP
+- Fast, dense eighth-note lines with chromatic enclosures, approach tones, and arpeggiated extensions.
+- Rapid II-V-I harmonic changes with altered dominants (b9, #9, b5, #5).`;
+            case 'hardbop':
+                return `Style: HARD BOP
+- Soulful blues vocabulary, minor pentatonic phrases, and catchy, energetic rhythm motifs.
+- Rich chord voicings with modal and bluesy color tones.`;
+            case 'contemporary':
+                return `Style: CONTEMPORARY JAZZ
+- Modern non-functional harmony, slash chords (e.g. C/D, F#m/B), wide melodic leaps, and asymmetrical rhythms.
+- Dynamic space, silence, and expressive extended harmonies.`;
+            case 'modal':
+                return `Style: MODAL JAZZ
+- Spacious, floating melodies focusing on scale degrees, 9ths, 11ths, and 13ths over long modal chord stays.
+- Minimal chromaticism; emphasis on repetition with subtle rhythmic variation.`;
+            default:
+                return `Style: JAZZ STANDARD
+- Classic swing phrasing with lyrical melody, clear II-V-I cadences, and elegant voice leading.`;
         }
-
-        const styles = {
-            'bebop': `STYLE: BEBOP
-- Texture: Rapid, flowing eighth-note and triplet runs interspersed with unexpected syncopated rests.
-- Anticipation: Frequently target the chord tones (3, 5, 7) of the NEXT chord on the final upbeat before the change.
-- Rhythmic Variety: Do NOT start every measure with a rest. Start phrases on varied beats (e.g., the 'and' of 1, beat 2, or beat 4) to break the 4/4 grid.
-- Surprise: Use asymmetrical phrase lengths. A mix of short motifs and long, driving lines is essential for a true bebop feel.`,
-
-            'hardbop': `STYLE: HARD BOP
-- Use blues vocabulary, blue notes, and minor pentatonic ideas.
-- Choose chords based on melody tones, not diatonic function.
-- Allow chromaticism but keep the phrasing soulful and strong.`,
-
-            'contemporary': `STYLE: CONTEMPORARY
-- Use slash chords and modern harmonic colors.
-- Melody may use wide intervals.
-- Allow modal interchange and non-functional harmony.
-- Avoid constant motion; silence and sustain are part of the melody.`,
-
-            'modal': `STYLE: MODAL JAZZ
-- Melody should be built primarily from the diatonic scale of the current mode.
-- Do not emphasize functional harmony.
-- Stay in one mode for multiple bars.
-- Use long, flowing melodic lines with minimal chromaticism.`,
-
-            'standard': `STYLE: STANDARD
-- Use typical jazz standard phrasing.
-- Rhythm is mainly quarter and eighth notes.
-- Use thirds and sevenths frequently in the melody.
-- Use II-V-I progressions frequently.`
-        };
-
-        return styles[style] || styles['standard'];
     }
 
     getDensityInstruction(style, density) {
-        // Bebop and Modal have fixed densities
-        if (style === 'bebop' || style.includes('BEBOP')) return "";
-        if (style === 'modal' || style.includes('MODAL')) return "";
-        if (style.startsWith('CUSTOM:')) return ""; // Custom prompts might define their own
-
-        // Density 1-5
-        /*
-         1: Very Low (Long tones, spacious)
-         2: Low
-         3: Medium
-         4: High
-         5: Very High (Fine notes)
-        */
-
-        if (density <= 1) {
-            return `DENSITY: VERY LOW (Long Tones & Space)
-- Use primarily half notes and whole notes.
-- CRITICAL: Do NOT be monotonic. Avoid a string of just whole notes.
-- Make the melody lyrical and "singable".
-- Use rhythmic displacement (tying over bar lines) to make long notes interesting.
-- Think of a slow ballad or a spacious Miles Davis approach (but not modal).`;
-        } else if (density === 2) {
-            return `DENSITY: LOW (Spacious)
-- Favor longer durations.
-- Use space (rests) effectively to let the melody breathe.
-- Avoid fast runs.
-- Focus on emotional weight of each note.`;
-        } else if (density === 4) {
-            return `DENSITY: HIGH (Active)
-- Use fine rhythmic values (eighths, triplet 8ths).
-- Create movement and energy.
-- Avoid long sustains unless at the end of a phrase.`;
-        } else if (density >= 5) {
-            return `DENSITY: VERY HIGH (Virtuosic)
-- Very active melody with 16th notes and complex runs.
-- High energy and technical.
-- Minimal rests.`;
-        }
-
-        // Density 3 (Medium) is default, no special instruction needed or just standard
-        return `DENSITY: MEDIUM
-- Balance between active lines and resting points.`;
+        if (style === 'bebop' || style === 'modal') return "";
+        
+        if (density <= 1) return "Very Low (mainly half and whole notes)";
+        if (density === 2) return "Low (spacious, let melody breathe)";
+        if (density === 4) return "High (active, many eighth notes)";
+        if (density >= 5) return "Very High (virtuosic, fast runs, sixteenth notes)";
+        return "Medium (balanced active lines and rests)";
     }
 }
 
