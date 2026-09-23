@@ -11,6 +11,13 @@ const LeadSheetParser = {
      * @returns {SheetMusic} - Parsed sheet music data
      */
     parse(input) {
+        if (!input) return new SheetMusic();
+
+        // Auto-convert if input is in ABC notation
+        if (typeof ABCConverter !== 'undefined' && ABCConverter.isABCNotation(input)) {
+            input = ABCConverter.convert(input);
+        }
+
         // Preprocess: delete newlines right after markers to prevent empty measures
         input = input.replace(/(?:\[[^\]]*\]|\|:|\(\d+\))\s*\r?\n/gi, (match) => match.trim() + ' ');
 
@@ -174,8 +181,8 @@ const LeadSheetParser = {
 
             // Pattern: chord in quotes OR note with optional duration
             // Chord: "ChordName"
-            // Note: potential ABC notation OR original lc/hc prefix
-            const pattern = /"([^"]+)"|([_^\=]?[a-gA-G][,']*|[lh]{0,2}?[a-gr][+-]?|r)\s*([0-9./]*)/g;
+            // Note: prioritize native notation ((?:ll|hh|l|h)?[a-g][+-]?), then rest (r), then ABC notation
+            const pattern = /"([^"]+)"|((?:ll|hh|l|h)?[a-g][+-]?|r|[_^=]+[a-gA-G][,']*|[A-G][,']*|[a-g][,']+)\s*([0-9./]*)/g;
             let match;
 
             while ((match = pattern.exec(segment)) !== null) {
@@ -268,8 +275,8 @@ const LeadSheetParser = {
             return note;
         }
 
-        // Check if ABC notation
-        const isABC = /^[_^\=]?[a-gA-G][,']*$/.test(pitchStr);
+        // Check if ABC notation: contains accidentals/octave markers or starts with uppercase
+        const isABC = /[\^_\=,']/.test(pitchStr) || (pitchStr.length > 0 && pitchStr.charAt(0) >= 'A' && pitchStr.charAt(0) <= 'Z');
 
         if (isABC) {
             let accidental = '';

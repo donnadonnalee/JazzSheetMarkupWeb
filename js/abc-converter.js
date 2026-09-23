@@ -111,6 +111,11 @@ const ABCConverter = {
         if (rhythm) sb += 'rhythm: ' + rhythm + '\n';
         sb += '\n';
 
+        let keyAccidentals = {};
+        if (typeof LeadSheetParser !== 'undefined' && typeof LeadSheetParser.getKeyAccidentals === 'function') {
+            keyAccidentals = LeadSheetParser.getKeyAccidentals(key);
+        }
+
         // Parse body into measures
         const content = this.preprocessVolta(body);
         // Segment into bar lines / repeats and music content
@@ -129,7 +134,7 @@ const ABCConverter = {
             // Bar line or repeat markers
             if (/^[:|\[\]]+$/.test(trimmed)) {
                 const mStr = currentM.trim();
-                const processed = mStr === '' ? '' : this.processMeasure(mStr, unit);
+                const processed = mStr === '' ? '' : this.processMeasure(mStr, unit, keyAccidentals);
 
                 if (trimmed === '|') {
                     if (processed !== '') {
@@ -161,14 +166,67 @@ const ABCConverter = {
 
         // Final trailing measure if any
         if (currentM.trim() !== '') {
-            const finalM = this.processMeasure(currentM.trim(), unit);
+            const finalM = this.processMeasure(currentM.trim(), unit, keyAccidentals);
             if (finalM !== '') sb += finalM + '\n';
         }
 
         return sb.trim();
     },
 
-    processMeasure(m, unit) {
+    /**
+     * Convert an ABC note (e.g. _B, ^f, c, C, C,, c') to native markup note (e.g. b-, hf+, hc, c, lc, hhc)
+     */
+    convertABCNoteToMarkup(abcNote, keyAccidentals = {}) {
+        if (!abcNote) return '';
+        let accidental = '';
+        let idx = 0;
+        const first = abcNote.charAt(0);
+        let hasExplicitAccidental = false;
+        if (first === '^') {
+            accidental = '+';
+            idx++;
+            hasExplicitAccidental = true;
+        } else if (first === '_') {
+            accidental = '-';
+            idx++;
+            hasExplicitAccidental = true;
+        } else if (first === '=') {
+            accidental = '';
+            idx++;
+            hasExplicitAccidental = true;
+        }
+
+        if (idx >= abcNote.length) return '';
+
+        const baseChar = abcNote.charAt(idx);
+        let octave = (baseChar >= 'A' && baseChar <= 'Z') ? 4 : 5;
+        const pitch = baseChar.toLowerCase();
+        idx++;
+
+        while (idx < abcNote.length) {
+            const c = abcNote.charAt(idx);
+            if (c === ',') octave--;
+            else if (c === '\'') octave++;
+            idx++;
+        }
+
+        if (!hasExplicitAccidental && keyAccidentals) {
+            const keyAcc = keyAccidentals[pitch];
+            if (keyAcc === '#') accidental = '+';
+            else if (keyAcc === '-') accidental = '-';
+        }
+
+        let prefix = '';
+        if (octave <= 2) prefix = 'll';
+        else if (octave === 3) prefix = 'l';
+        else if (octave === 4) prefix = '';
+        else if (octave === 5) prefix = 'h';
+        else if (octave >= 6) prefix = 'hh';
+
+        return prefix + pitch + accidental;
+    },
+
+    processMeasure(m, unit, keyAccidentals = {}) {
         let res = '';
         // 1: Chords ("G7"), 2: Tuplet ((3), 3: Potential ABC Chord or Marker ([...]), 4: Solo Note ([_^=]?[a-gA-G][,']*), 5: Solo Duration, 6: Rest
         const p = /("[^"]*")|(\(\d+)|\[([^\]]+)\]([0-9./]*)|([_^\=]?[a-gA-G][,']*)([0-9./]*)|(z|x)([0-9./]*)/g;
@@ -208,14 +266,16 @@ const ABCConverter = {
                     if (lastNote !== null) {
                         let d = this.parseDuration(durStr) * unit;
                         if (tupletNotesLeft > 0) { d *= tupletMultiplier; tupletNotesLeft--; }
-                        res += lastNote + MusicUtils.trimDuration(d) + ' ';
+                        const markupNote = this.convertABCNoteToMarkup(lastNote, keyAccidentals);
+                        res += markupNote + MusicUtils.trimDuration(d) + ' ';
                     }
                 }
             } else if (match[5] !== undefined) {
                 const note = match[5];
                 let d = this.parseDuration(match[6]) * unit;
                 if (tupletNotesLeft > 0) { d *= tupletMultiplier; tupletNotesLeft--; }
-                res += note + MusicUtils.trimDuration(d) + ' ';
+                const markupNote = this.convertABCNoteToMarkup(note, keyAccidentals);
+                res += markupNote + MusicUtils.trimDuration(d) + ' ';
             } else if (match[7] !== undefined) {
                 let d = this.parseDuration(match[8]) * unit;
                 if (tupletNotesLeft > 0) { d *= tupletMultiplier; tupletNotesLeft--; }
