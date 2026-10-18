@@ -66,12 +66,26 @@ class Forum {
     }
 
     /**
-     * Delete a song (only if author)
+     * Update/Overwrite an existing song in the forum (free overwrite)
+     */
+    async updateSong(songId, title, markup, author) {
+        if (!markup || !markup.trim()) throw new Error("Markup is empty");
+        const docRef = this.songsCollection.doc(songId);
+        const updateData = {
+            markup: markup.trim(),
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+        if (title && title.trim()) updateData.title = title.trim();
+        if (author && author.trim()) updateData.author = author.trim();
+
+        await docRef.update(updateData);
+        return true;
+    }
+
+    /**
+     * Delete a song (free permission)
      */
     async deleteSong(songId, authorUuid) {
-        if (authorUuid !== this.userUuid) {
-            throw new Error("You can only delete your own posts.");
-        }
         return await this.songsCollection.doc(songId).delete();
     }
 

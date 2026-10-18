@@ -217,8 +217,14 @@
                     <label for="postAuthor">Author / Contributor Name:</label>
                     <input type="text" id="postAuthor" placeholder="e.g., Jazz Player" class="styled-input">
                 </div>
+                <div class="form-group" id="postAllVersionsGroup" style="display:none; margin-top: 6px;">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.85rem; font-weight: normal; color: var(--text-secondary);">
+                        <input type="checkbox" id="postAllVersions"> Include all version tabs in this post
+                    </label>
+                </div>
                 <p class="form-note">Current ABC notation in the editor will be shared with all users.</p>
-                <div class="modal-actions">
+                <div class="modal-actions" style="display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap;">
+                    <button id="btnOverwritePost" class="btn btn-warning" style="display:none; background: #f59e0b; border: 1px solid #d97706; color: #ffffff; font-weight:600;">💾 Overwrite Sheet</button>
                     <button id="btnSubmitPost" class="btn btn-primary" style="font-weight:600;">Post to Forum</button>
                     <button id="btnCancelPost" class="btn btn-tool">Cancel</button>
                 </div>

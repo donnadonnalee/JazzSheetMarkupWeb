@@ -23,9 +23,7 @@ class Tune {
             if (m) {
                 return m[1].trim();
             }
-            if (index === 0) {
-                return this.title;
-            }
+            return this.title;
         }
         return `Ver.${index + 1}`;
     }
@@ -84,23 +82,49 @@ class MultiTuneHelper {
                 if (i === 0 && leadingHeader) {
                     block = MultiTuneHelper.attachLeadingHeaderToFirstTune(block, leadingHeader);
                 }
-                const xNum = xNumbers[i];
+                const assignedX = tunes.length + 1;
+                // Normalize X: line to match sequence
+                if (/^[\t ]*X[\t ]*[:：]/im.test(block)) {
+                    block = block.replace(/^[\t ]*X[\t ]*[:：][\t ]*\d*/im, `X:${assignedX}`);
+                } else {
+                    block = `X:${assignedX}\n${block}`;
+                }
                 const titles = MultiTuneHelper.extractTitles(block);
-                tunes.push(new Tune(xNum, titles.title, titles.subTitle, block, start, end));
+                tunes.push(new Tune(assignedX, titles.title, titles.subTitle, block, start, end));
             }
         } else {
-            // Single tune
-            const xNum = xNumbers.length === 0 ? 1 : xNumbers[0];
-            let content = fullText;
+            // Single tune - ALWAYS normalize to X:1 so imported/forum songs are never mislabeled as X:2 or X:3
+            let content = fullText.trim();
             if (xIndices.length > 0 && leadingHeader) {
                 const block = fullText.substring(xIndices[0]).trim();
                 content = MultiTuneHelper.attachLeadingHeaderToFirstTune(block, leadingHeader);
             }
+            if (/^[\t ]*X[\t ]*[:：]/im.test(content)) {
+                content = content.replace(/^[\t ]*X[\t ]*[:：][\t ]*\d*/im, "X:1");
+            } else if (content) {
+                content = `X:1\n${content}`;
+            }
             const titles = MultiTuneHelper.extractTitles(content);
-            tunes.push(new Tune(xNum, titles.title, titles.subTitle, content, 0, fullText.length));
+            tunes.push(new Tune(1, titles.title, titles.subTitle, content, 0, content.length));
         }
 
         return tunes;
+    }
+
+    /**
+     * Reindexes an array of Tune objects sequentially from X:1 to X:N.
+     */
+    static reindexTunes(tunes) {
+        if (!tunes) return;
+        tunes.forEach((tune, idx) => {
+            const newX = idx + 1;
+            tune.x = newX;
+            if (/^[\t ]*X[\t ]*[:：]/im.test(tune.content)) {
+                tune.content = tune.content.replace(/^[\t ]*X[\t ]*[:：][\t ]*\d*/im, `X:${newX}`);
+            } else if (tune.content) {
+                tune.content = `X:${newX}\n${tune.content}`;
+            }
+        });
     }
 
     static isMeaningfulTune(text) {

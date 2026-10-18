@@ -68,6 +68,10 @@ class AppController {
         this.currentTuneIndex = 0;
         this.isSwitchingTune = false;
 
+        // Forum tracking state
+        this.loadedForumSongId = null;
+        this.loadedForumSongTitle = "";
+
         this.initDOMElements();
         this.initRenderer();
         this.initPlayerCallbacks();
@@ -142,8 +146,11 @@ class AppController {
             btnClosePost: document.getElementById("btnClosePost"),
             btnCancelPost: document.getElementById("btnCancelPost"),
             btnSubmitPost: document.getElementById("btnSubmitPost"),
+            btnOverwritePost: document.getElementById("btnOverwritePost"),
             postTitle: document.getElementById("postTitle"),
             postAuthor: document.getElementById("postAuthor"),
+            postAllVersionsGroup: document.getElementById("postAllVersionsGroup"),
+            postAllVersions: document.getElementById("postAllVersions"),
             videoModal: document.getElementById("videoModal"),
             btnCloseVideo: document.getElementById("btnCloseVideo"),
             videoModalTitle: document.getElementById("videoModalTitle"),
@@ -203,9 +210,10 @@ class AppController {
             clearTimeout(this.debounceTimer);
             this.debounceTimer = setTimeout(() => {
                 const currentText = this.el.abcInput.value;
-                // Check if user pasted a multi-tune document with multiple X:
                 const detectedTunes = MultiTuneHelper.splitTunes(currentText);
-                if (detectedTunes.length > 1 && this.currentTunes.length <= 1) {
+
+                // If user pasted or typed multiple tunes, expand into tabs immediately!
+                if (detectedTunes.length > 1) {
                     this.loadFullSong(currentText);
                     return;
                 }
@@ -221,6 +229,18 @@ class AppController {
                 this.updateTransposeDisplay();
                 this.reparseAndRender();
             }, 120);
+        });
+
+        // Instant Paste handler: detects multi-tune document immediately on Ctrl+V
+        this.el.abcInput.addEventListener("paste", () => {
+            setTimeout(() => {
+                const currentText = this.el.abcInput.value;
+                const detectedTunes = MultiTuneHelper.splitTunes(currentText);
+                if (detectedTunes.length > 1) {
+                    this.loadFullSong(currentText);
+                    this.showToast(`Separated into ${detectedTunes.length} version tabs`);
+                }
+            }, 40);
         });
 
         // Version Tabs add button
@@ -282,7 +302,10 @@ class AppController {
             this.el.btnCancelPost.addEventListener("click", () => this.hidePostModal());
         }
         if (this.el.btnSubmitPost) {
-            this.el.btnSubmitPost.addEventListener("click", () => this.submitPost());
+            this.el.btnSubmitPost.addEventListener("click", () => this.submitPost(false));
+        }
+        if (this.el.btnOverwritePost) {
+            this.el.btnOverwritePost.addEventListener("click", () => this.submitPost(true));
         }
 
         // Video Modal Buttons
@@ -488,6 +511,8 @@ class AppController {
 
     loadDefaultSong() {
         this.player.stop();
+        this.loadedForumSongId = null;
+        this.loadedForumSongTitle = "";
         this.loadFullSong(DEFAULT_ABC);
     }
 
@@ -523,14 +548,33 @@ class AppController {
         if (!this.el.versionTabsContainer) return;
         this.el.versionTabsContainer.innerHTML = "";
 
-        this.currentTunes.forEach((tune, idx) => {
-            const btn = document.createElement("button");
-            btn.className = `version-tab ${idx === this.currentTuneIndex ? "active" : ""}`;
-            const name = tune.getDisplayName(idx);
-            btn.innerHTML = `<span class="tab-badge">X:${tune.x || (idx + 1)}</span> <span>${this.escapeHtml(name)}</span>`;
-            btn.title = `Version ${tune.x || (idx + 1)}: ${name}\nClick to switch | Double-click to rename`;
+        const showCloseBtn = this.currentTunes.length > 1;
 
-            btn.addEventListener("click", () => {
+        this.currentTunes.forEach((tune, idx) => {
+            const tabEl = document.createElement("div");
+            tabEl.className = `version-tab ${idx === this.currentTuneIndex ? "active" : ""}`;
+            tabEl.setAttribute("role", "button");
+            tabEl.setAttribute("tabindex", "0");
+            const name = tune.getDisplayName(idx);
+
+            tabEl.innerHTML = `
+                <span class="tab-badge">X:${tune.x || (idx + 1)}</span>
+                <span class="tab-title-text">${this.escapeHtml(name)}</span>
+                ${showCloseBtn ? `<span class="btn-tab-close" role="button" title="Delete version" data-idx="${idx}">&times;</span>` : ''}
+            `;
+            tabEl.title = `Version ${tune.x || (idx + 1)}: ${name}\nClick to switch | Double-click to rename`;
+
+            const closeBtn = tabEl.querySelector(".btn-tab-close");
+            if (closeBtn) {
+                closeBtn.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    this.deleteVersion(idx);
+                });
+            }
+
+            tabEl.addEventListener("click", (e) => {
+                if (e.target.closest(".btn-tab-close")) return;
                 if (idx === this.currentTuneIndex) return;
                 // Save current editor content to current tune
                 if (this.currentTuneIndex >= 0 && this.currentTuneIndex < this.currentTunes.length) {
@@ -542,13 +586,112 @@ class AppController {
                 this.loadCurrentTuneToEditor();
             });
 
-            btn.addEventListener("dblclick", (e) => {
+            tabEl.addEventListener("dblclick", (e) => {
+                if (e.target.closest(".btn-tab-close")) return;
                 e.stopPropagation();
                 this.renameVersionDialog(idx);
             });
 
-            this.el.versionTabsContainer.appendChild(btn);
+            tabEl.addEventListener("contextmenu", (e) => {
+                e.preventDefault();
+                this.showVersionContextMenu(idx, e);
+            });
+
+            this.el.versionTabsContainer.appendChild(tabEl);
         });
+    }
+
+    deleteVersion(index) {
+        if (this.currentTunes.length <= 1) {
+            this.showToast("Cannot delete the only version");
+            return;
+        }
+        const tune = this.currentTunes[index];
+        const name = tune ? tune.getDisplayName(index) : `Ver.${index + 1}`;
+
+        this.showConfirmModal("Delete Version", `Are you sure you want to delete 「${name}」?`, () => {
+            this.currentTunes.splice(index, 1);
+            MultiTuneHelper.reindexTunes(this.currentTunes);
+
+            if (this.currentTuneIndex >= this.currentTunes.length) {
+                this.currentTuneIndex = this.currentTunes.length - 1;
+            } else if (this.currentTuneIndex === index) {
+                this.currentTuneIndex = Math.max(0, index - 1);
+            } else if (this.currentTuneIndex > index) {
+                this.currentTuneIndex--;
+            }
+
+            this.updateTuneTabsUI();
+            this.loadCurrentTuneToEditor();
+            this.showToast(`Deleted version: ${name}`);
+        });
+    }
+
+    showConfirmModal(title, message, onConfirm) {
+        let modal = document.getElementById("confirmModal");
+        if (!modal) {
+            modal = document.createElement("div");
+            modal.id = "confirmModal";
+            modal.className = "modal-overlay hidden";
+            modal.innerHTML = `
+                <div class="modal-card modal-card-sm" style="max-width: 380px; text-align: center; border-radius: 12px; overflow: hidden;">
+                    <div class="modal-header" style="justify-content: center; background: #b91c1c;">
+                        <h2 id="confirmModalTitle" style="font-size: 1.05rem; margin: 0; color: #fff;"></h2>
+                    </div>
+                    <div style="padding: 1.5rem; background: var(--bg-surface);">
+                        <p id="confirmModalMessage" style="color: var(--text-primary); margin: 0 0 1.5rem; line-height: 1.5; font-size: 0.95rem;"></p>
+                        <div style="display: flex; gap: 0.75rem; justify-content: center;">
+                            <button id="btnConfirmCancel" class="btn btn-secondary" style="flex: 1; padding: 0.55rem 1rem;">Cancel</button>
+                            <button id="btnConfirmOk" class="btn btn-danger" style="flex: 1; padding: 0.55rem 1rem; background: #ef4444; color: #ffffff; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">Delete</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+
+        document.getElementById("confirmModalTitle").textContent = title;
+        document.getElementById("confirmModalMessage").textContent = message;
+        modal.classList.remove("hidden");
+
+        const btnCancel = document.getElementById("btnConfirmCancel");
+        const btnOk = document.getElementById("btnConfirmOk");
+
+        const cleanup = () => {
+            modal.classList.add("hidden");
+            btnCancel.onclick = null;
+            btnOk.onclick = null;
+        };
+
+        btnCancel.onclick = () => cleanup();
+        btnOk.onclick = () => {
+            cleanup();
+            if (typeof onConfirm === "function") onConfirm();
+        };
+    }
+
+    showVersionContextMenu(index, e) {
+        const tune = this.currentTunes[index];
+        const name = tune ? tune.getDisplayName(index) : `Ver.${index + 1}`;
+        const canDelete = this.currentTunes.length > 1;
+
+        const choice = prompt(
+            `Version Options: "${name}"\n\n1: Rename\n2: Duplicate\n${canDelete ? '3: Delete\n' : ''}\nEnter option number (1-3):`,
+            "1"
+        );
+        if (choice === "1") {
+            this.renameVersionDialog(index);
+        } else if (choice === "2") {
+            const nextX = this.currentTunes.length + 1;
+            const newTune = MultiTuneHelper.createDuplicateTune(tune, `${name} (Copy)`, nextX);
+            this.currentTunes.push(newTune);
+            this.currentTuneIndex = this.currentTunes.length - 1;
+            this.updateTuneTabsUI();
+            this.loadCurrentTuneToEditor();
+            this.showToast(`Duplicated: ${name}`);
+        } else if (choice === "3" && canDelete) {
+            this.deleteVersion(index);
+        }
     }
 
     updateTuneTabsActiveState() {
@@ -566,7 +709,14 @@ class AppController {
         if (curTab) {
             const tune = this.currentTunes[this.currentTuneIndex];
             const name = tune.getDisplayName(this.currentTuneIndex);
-            curTab.innerHTML = `<span class="tab-badge">X:${tune.x || (this.currentTuneIndex + 1)}</span> <span>${this.escapeHtml(name)}</span>`;
+            const titleEl = curTab.querySelector(".tab-title-text");
+            if (titleEl) {
+                titleEl.textContent = name;
+            }
+            const badge = curTab.querySelector(".tab-badge");
+            if (badge) {
+                badge.textContent = `X:${tune.x || (this.currentTuneIndex + 1)}`;
+            }
         }
     }
 
@@ -667,7 +817,6 @@ class AppController {
         };
 
         this.el.forumList.innerHTML = filtered.map(song => {
-            const isOwner = song.uuid && window.userUuid && song.uuid === window.userUuid;
             const safeTitle = escapeHtml(song.title || "Untitled");
             const safeAuthor = escapeHtml(song.author || "Browser User");
             const attrTitle = (song.title || "Untitled").replace(/'/g, "\\'");
@@ -683,10 +832,11 @@ class AppController {
                         </div>
                     </div>
                     <div class="forum-actions">
-                        <button class="action-btn action-btn-load" onclick="window.app.loadSongFromForum('${song.id}')">📄 Load</button>
+                        <button class="action-btn action-btn-load" title="Load sheet to editor" onclick="window.app.loadSongFromForum('${song.id}')">📄 Load</button>
+                        <button class="action-btn action-btn-overwrite" title="Overwrite this forum sheet with current editor content" onclick="window.app.overwriteSongDirect('${song.id}', '${attrTitle}')">💾 Overwrite</button>
                         <button class="action-btn action-btn-like" onclick="window.app.likeSong('${song.id}')">❤️ ${song.likes || 0}</button>
                         <button class="action-btn" onclick="window.app.showVideos('${song.id}', '${attrTitle}')">🎥 ${song.videoCount || 0}</button>
-                        ${isOwner ? `<button class="action-btn action-btn-delete" title="Delete sheet" onclick="window.app.deleteSong('${song.id}', '${song.uuid}')">🗑️</button>` : ''}
+                        <button class="action-btn action-btn-delete" title="Delete sheet" onclick="window.app.deleteSong('${song.id}', '${attrTitle}')">🗑️</button>
                     </div>
                 </div>
             `;
@@ -698,12 +848,113 @@ class AppController {
         if (!song) return;
 
         this.player.stop();
-        this.loadFullSong(song.markup);
+
+        let tunes = MultiTuneHelper.splitTunes(song.markup || "");
+
+        // If multiple tunes were bundled, check if different songs were mistakenly combined
+        // (e.g. Danny Boy was accidentally bundled with Luminescence)
+        if (tunes.length > 1 && song.title) {
+            const normSongTitle = song.title.trim().toLowerCase();
+            const matchedTune = tunes.find(t => {
+                const tTitle = (t.title || "").trim().toLowerCase();
+                const tSub = (t.subTitle || "").trim().toLowerCase();
+                return tTitle.includes(normSongTitle) || normSongTitle.includes(tTitle) ||
+                       tSub.includes(normSongTitle) || normSongTitle.includes(tSub);
+            });
+
+            // Check if other tunes belong to a completely different song (like Danny Boy)
+            const otherTunesAreDifferent = tunes.some(t => {
+                const tTitle = (t.title || "").trim().toLowerCase();
+                return t !== matchedTune && tTitle && !tTitle.includes(normSongTitle) && !normSongTitle.includes(tTitle);
+            });
+
+            if (matchedTune && otherTunesAreDifferent) {
+                // Isolate the matching tune and normalize to X:1
+                matchedTune.x = 1;
+                if (/^[\t ]*X[\t ]*[:：]/im.test(matchedTune.content)) {
+                    matchedTune.content = matchedTune.content.replace(/^[\t ]*X[\t ]*[:：][\t ]*\d*/im, "X:1");
+                } else {
+                    matchedTune.content = `X:1\n${matchedTune.content}`;
+                }
+                tunes = [matchedTune];
+            } else if (matchedTune) {
+                // If it's legitimately multiple versions of the same song, activate the matched one
+                const matchedIdx = tunes.indexOf(matchedTune);
+                this.currentTunes = tunes;
+                this.currentTuneIndex = matchedIdx >= 0 ? matchedIdx : 0;
+                this.loadedForumSongId = song.id;
+                this.loadedForumSongTitle = song.title || "Untitled";
+                this.updateTuneTabsUI();
+                this.loadCurrentTuneToEditor();
+                if (this.el.forumModal) this.el.forumModal.classList.add("hidden");
+                this.showToast(`Loaded: ${song.title}`);
+                return;
+            }
+        }
+
+        if (tunes.length === 0) {
+            tunes.push(new Tune(1, song.title || "Untitled", "", song.markup || ""));
+        }
+
+        // Single tune title fallback
+        if (tunes.length === 1 && !tunes[0].title && song.title) {
+            tunes[0].title = song.title;
+        }
+
+        this.currentTunes = tunes;
+        this.currentTuneIndex = 0;
+        this.loadedForumSongId = song.id;
+        this.loadedForumSongTitle = song.title || "Untitled";
+        this.updateTuneTabsUI();
+        this.loadCurrentTuneToEditor();
 
         if (this.el.forumModal) {
             this.el.forumModal.classList.add("hidden");
         }
         this.showToast(`Loaded: ${song.title}`);
+    }
+
+    async overwriteSongDirect(songId, songTitle) {
+        if (!this.forum) return;
+
+        // Save current editor text to current tune
+        if (this.currentTuneIndex >= 0 && this.currentTuneIndex < this.currentTunes.length) {
+            this.currentTunes[this.currentTuneIndex].content = this.el.abcInput.value;
+        }
+
+        let markup = (this.currentTunes.length > 1)
+            ? MultiTuneHelper.combineTunes(this.currentTunes)
+            : this.el.abcInput.value.trim();
+
+        if (this.currentTunes.length <= 1) {
+            if (/^[\t ]*X[\t ]*[:：]/im.test(markup)) {
+                markup = markup.replace(/^[\t ]*X[\t ]*[:：][\t ]*\d*/im, "X:1");
+            } else if (markup) {
+                markup = `X:1\n${markup}`;
+            }
+        }
+
+        if (!markup) {
+            this.showToast("Editor is empty");
+            return;
+        }
+
+        this.showConfirmModal(
+            "Overwrite Sheet",
+            `Are you sure you want to overwrite "${songTitle}" in the forum with your current editor sheet?`,
+            async () => {
+                try {
+                    await this.forum.updateSong(songId, songTitle, markup);
+                    this.loadedForumSongId = songId;
+                    this.loadedForumSongTitle = songTitle;
+                    this.showToast(`Updated "${songTitle}" in Forum! 💾`);
+                    await this.loadAndRenderForum();
+                } catch (e) {
+                    console.error("Overwrite error:", e);
+                    this.showToast("Update failed: " + e.message);
+                }
+            }
+        );
     }
 
     async likeSong(songId) {
@@ -717,16 +968,26 @@ class AppController {
         }
     }
 
-    async deleteSong(songId, authorUuid) {
+    async deleteSong(songId, songTitle) {
         if (!this.forum) return;
-        if (!confirm("Are you sure you want to delete this sheet from the forum?")) return;
-        try {
-            await this.forum.deleteSong(songId, authorUuid);
-            this.showToast("Sheet deleted");
-            await this.loadAndRenderForum();
-        } catch (error) {
-            this.showToast(error.message);
-        }
+        const title = songTitle || "this sheet";
+        this.showConfirmModal(
+            "Delete Sheet",
+            `Are you sure you want to delete "${title}" from the forum?`,
+            async () => {
+                try {
+                    await this.forum.deleteSong(songId);
+                    if (this.loadedForumSongId === songId) {
+                        this.loadedForumSongId = null;
+                        this.loadedForumSongTitle = "";
+                    }
+                    this.showToast("Sheet deleted");
+                    await this.loadAndRenderForum();
+                } catch (error) {
+                    this.showToast(error.message);
+                }
+            }
+        );
     }
 
     async showVideos(songId, songTitle) {
@@ -774,12 +1035,36 @@ class AppController {
     showPostModal() {
         if (this.el.postModal) {
             this.el.postModal.classList.remove("hidden");
+            const defaultTitle = this.loadedForumSongTitle
+                || (this.currentSheet && this.currentSheet.title ? this.currentSheet.title : "");
             if (this.el.postTitle) {
-                this.el.postTitle.value = this.currentSheet && this.currentSheet.title ? this.currentSheet.title : "";
+                this.el.postTitle.value = defaultTitle;
                 this.el.postTitle.focus();
             }
             if (this.el.postAuthor && !this.el.postAuthor.value) {
                 this.el.postAuthor.value = localStorage.getItem("jazz_author_name") || "";
+            }
+            if (this.el.postAllVersionsGroup) {
+                this.el.postAllVersionsGroup.style.display = (this.currentTunes && this.currentTunes.length > 1) ? "block" : "none";
+            }
+            if (this.el.postAllVersions) {
+                this.el.postAllVersions.checked = false;
+            }
+
+            // If loaded from forum, allow direct Overwrite
+            if (this.loadedForumSongId && this.el.btnOverwritePost) {
+                this.el.btnOverwritePost.style.display = "inline-block";
+                this.el.btnOverwritePost.textContent = `💾 Overwrite "${this.loadedForumSongTitle || "Sheet"}"`;
+                if (this.el.btnSubmitPost) {
+                    this.el.btnSubmitPost.textContent = "➕ Post as New";
+                }
+            } else {
+                if (this.el.btnOverwritePost) {
+                    this.el.btnOverwritePost.style.display = "none";
+                }
+                if (this.el.btnSubmitPost) {
+                    this.el.btnSubmitPost.textContent = "Post to Forum";
+                }
             }
         }
     }
@@ -790,7 +1075,7 @@ class AppController {
         }
     }
 
-    async submitPost() {
+    async submitPost(isOverwrite = false) {
         if (!this.forum) {
             this.showToast("Firebase is not initialized");
             return;
@@ -803,9 +1088,20 @@ class AppController {
         if (this.currentTuneIndex >= 0 && this.currentTuneIndex < this.currentTunes.length) {
             this.currentTunes[this.currentTuneIndex].content = this.el.abcInput.value;
         }
-        const markup = (this.currentTunes.length > 1)
-            ? MultiTuneHelper.combineTunes(this.currentTunes)
-            : this.el.abcInput.value.trim();
+
+        const shouldIncludeAll = this.el.postAllVersions && this.el.postAllVersions.checked && this.currentTunes.length > 1;
+        let markup = "";
+        if (shouldIncludeAll) {
+            markup = MultiTuneHelper.combineTunes(this.currentTunes);
+        } else {
+            // Post current active tune only, normalized to X:1
+            markup = this.el.abcInput.value.trim();
+            if (/^[\t ]*X[\t ]*[:：]/im.test(markup)) {
+                markup = markup.replace(/^[\t ]*X[\t ]*[:：][\t ]*\d*/im, "X:1");
+            } else if (markup) {
+                markup = `X:1\n${markup}`;
+            }
+        }
 
         if (!title) {
             alert("Please enter a song title.");
@@ -820,21 +1116,41 @@ class AppController {
             localStorage.setItem("jazz_author_name", author);
         }
 
+        const activeBtn = (isOverwrite && this.el.btnOverwritePost) ? this.el.btnOverwritePost : this.el.btnSubmitPost;
+        const origText = activeBtn ? activeBtn.textContent : "";
+
         try {
-            this.el.btnSubmitPost.disabled = true;
-            this.el.btnSubmitPost.textContent = "Posting...";
-            await this.forum.uploadSong(title, markup, author);
-            this.hidePostModal();
-            this.showToast("Successfully posted to forum! 🎉");
+            if (activeBtn) {
+                activeBtn.disabled = true;
+                activeBtn.textContent = isOverwrite ? "Overwriting..." : "Posting...";
+            }
+
+            if (isOverwrite && this.loadedForumSongId) {
+                await this.forum.updateSong(this.loadedForumSongId, title, markup, author);
+                this.loadedForumSongTitle = title;
+                this.hidePostModal();
+                this.showToast(`Successfully updated "${title}"! 💾`);
+            } else {
+                const docRef = await this.forum.uploadSong(title, markup, author);
+                if (docRef && docRef.id) {
+                    this.loadedForumSongId = docRef.id;
+                    this.loadedForumSongTitle = title;
+                }
+                this.hidePostModal();
+                this.showToast("Successfully posted to forum! 🎉");
+            }
+
             if (this.el.forumModal && !this.el.forumModal.classList.contains("hidden")) {
                 await this.loadAndRenderForum();
             }
         } catch (error) {
-            console.error("Upload error:", error);
-            this.showToast("Upload failed: " + error.message);
+            console.error("Post error:", error);
+            this.showToast("Operation failed: " + error.message);
         } finally {
-            this.el.btnSubmitPost.disabled = false;
-            this.el.btnSubmitPost.textContent = "Post to Forum";
+            if (activeBtn) {
+                activeBtn.disabled = false;
+                activeBtn.textContent = origText;
+            }
         }
     }
 
