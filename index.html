@@ -1,287 +1,246 @@
 <!DOCTYPE html>
 <html lang="ja">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lead Sheet Markup Viewer | Professional Jazz Notation Online</title>
-    <meta name="description"
-        content="A professional-grade web application for viewing and sharing jazz lead sheet markup. Features AI composition, browser-based rendering, and a community forum.">
-    <meta name="keywords" content="jazz, lead sheet, sheet music, music notation, ai music, bebop, forum">
-    <meta name="author" content="donnadonnalee">
-
-    <!-- Open Graph / Facebook -->
-    <meta property="og:type" content="website">
-    <meta property="og:url" content="https://donnadonnalee.github.io/leadsheetmarkup/">
-    <meta property="og:title" content="Lead Sheet Markup Viewer - Professional Jazz Notation">
-    <meta property="og:description" content="View, share, and compose jazz lead sheets online with AI assistance.">
-    <meta property="og:image" content="https://donnadonnalee.github.io/leadsheetmarkup/assets/og-image.jpg">
-
-    <!-- Twitter -->
-    <meta property="twitter:card" content="summary_large_image">
-    <meta property="twitter:title" content="Lead Sheet Markup Viewer">
-    <meta property="twitter:description" content="Professional jazz notation in your browser.">
-
-    <!-- Google Fonts: Caveat for Title, Oswald for Chords -->
-    <link
-        href="https://fonts.googleapis.com/css2?family=Caveat:wght@400..700&family=Oswald:wght@200..700&family=Inter:wght@400;700&family=Noto+Music&display=swap"
-        rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <title>Jazz Sheet Markup | ABC Lead Sheet Viewer & Synthesizer</title>
+    <meta name="description" content="Professional Jazz Lead Sheet renderer and playback synthesizer powered by ABC notation.">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Inter:wght@400;500;600;700&family=Oswald:wght@500;600;700&family=Noto+Music&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/styles.css">
 </head>
-
-<body>
-    <!-- Android App Promo Banner -->
-    <div class="app-banner">
-        <div class="banner-content">
-            <span class="banner-icon">📱</span>
-            <span class="banner-text">Get the Android app for offline practice!</span>
-            <a href="https://play.google.com/store/apps/details?id=jp.example.readsheetreader&hl=ja" target="_blank"
-                class="btn btn-small btn-accent">
-                Download on Google Play
-            </a>
-        </div>
-    </div>
-    <div class="container">
-        <!-- Header -->
-        <header>
-            <h1>🎵 Lead Sheet Markup Viewer</h1>
-            <p class="subtitle">Jazz notation in your browser</p>
+<body class="light-theme">
+    <!-- App Container -->
+    <div class="app-layout">
+        <!-- Top Navigation Bar -->
+        <header class="top-nav">
+            <div class="nav-left">
+                <span class="logo-icon">🎷</span>
+                <span class="brand-title">Jazz Sheet Markup</span>
+                <span class="brand-tag">ABC Renderer & Synth</span>
+            </div>
+            <div class="nav-center">
+                <!-- Forum Navigation Actions -->
+                <div class="btn-group">
+                    <button id="btnForum" class="btn btn-tool" style="background:#0284c7; border:1px solid #0369a1; font-weight:600;" title="オンライン楽譜フォーラムを開く">🌐 Forum</button>
+                    <button id="btnShareForum" class="btn btn-tool" style="background:#0d9488; border:1px solid #0f766e;" title="現在の楽譜をフォーラムに投稿する">📤 Post Sheet</button>
+                </div>
+            </div>
+            <div class="nav-right">
+                <!-- Quick Transpose Buttons -->
+                <div class="btn-group transpose-group">
+                    <button id="btnTransposeDown" class="btn btn-tool" title="Transpose Down 1 Semitone">-1</button>
+                    <span id="transposeDisplay" class="transpose-label">Orig</span>
+                    <button id="btnTransposeUp" class="btn btn-tool" title="Transpose Up 1 Semitone">+1</button>
+                    <button id="btnToggleL" class="btn btn-tool" title="Toggle L: 1/8 ⇔ L: 1/4">L: 1/8 ⇄ 1/4</button>
+                </div>
+                <!-- Fullscreen Session (Zen Mode) -->
+                <button id="btnZenMode" class="btn btn-tool" style="background:#1b5e20; border:1px solid #2e7d32; font-weight:600;" title="全画面セッション表示 (ヘッダー・フッター非表示)">🖥️ Fullscreen</button>
+                <!-- Editor Toggle -->
+                <button id="btnToggleEditor" class="btn btn-tool" style="background:#2a3449; border:1px solid #3e4c68;" title="Toggle ABC Editor">📝 Editor</button>
+                <!-- Theme Toggle -->
+                <button id="btnThemeToggle" class="btn btn-icon" title="Toggle Dark/Light Mode">🌙</button>
+            </div>
         </header>
 
-        <!-- Main Content -->
-        <div class="main-content">
-            <!-- Editor Panel -->
-            <div class="editor-panel">
-                <div class="panel-header">
-                    <h2>Markup Editor</h2>
-                    <div class="button-group">
-                        <button id="btnSample" class="btn btn-secondary">Load Sample</button>
-                        <button id="btnHelp" class="btn btn-secondary">❓ Help</button>
-                        <button id="btnShareForum" class="btn btn-accent">📤 Share to Forum</button>
-                        <button id="btnClear" class="btn btn-secondary">Clear</button>
+        <!-- Main Workspace (Editor + Canvas) -->
+        <main class="workspace">
+            <!-- Left Panel: ABC Notation Editor -->
+            <section class="editor-pane">
+                <div class="pane-header">
+                    <h3>ABC Notation</h3>
+                    <div class="header-actions">
+                        <button id="btnCopy" class="btn btn-xs">Copy</button>
+                        <button id="btnClear" class="btn btn-xs btn-danger">Clear</button>
                     </div>
                 </div>
-                <textarea id="markupInput" placeholder="Enter your lead sheet markup here..."></textarea>
-            </div>
-
-            <!-- Sheet Music Display -->
-            <div class="sheet-panel">
-                <div class="panel-header">
-                    <h2>Sheet Music</h2>
-                    <div class="button-group">
-                        <div class="playback-controls"
-                            style="display:flex; align-items:center; gap:10px; margin-right:15px; background:#f5f5f5; padding:4px 10px; border-radius:4px;">
-                            <button id="btnPlay" class="btn btn-small" title="Play">▶</button>
-                            <button id="btnStop" class="btn btn-small" title="Stop">⏹</button>
-                            <div style="display:flex; align-items:center; gap:5px; font-size:12px;">
-                                <label for="bpmSlider">BPM:</label>
-                                <input type="range" id="bpmSlider" min="40" max="240" value="120" style="width:80px;">
-                                <span id="bpmValue">120</span>
-                            </div>
-                            <div style="display:flex; gap:8px; font-size:12px; margin-left:10px;">
-                                <label><input type="checkbox" id="checkMuteMelody"> Mute Mel</label>
-                                <label><input type="checkbox" id="checkMuteChords"> Mute Acc</label>
-                                <label style="margin-left:5px; font-weight:bold; color:#d35400;"><input type="checkbox"
-                                        id="checkJazzMode"> Swing Mode</label>
-                            </div>
-                        </div>
-                        <button id="btnSettings" class="btn btn-secondary">⚙️ Settings</button>
-                        <button id="btnForum" class="btn btn-secondary">🌐 Browse Forum</button>
-                        <button id="btnAI" class="btn btn-primary">🤖 AI Composer</button>
+                <!-- Multi-tune / Version Switching Tabs -->
+                <div class="version-tab-bar" id="versionTabBar">
+                    <div class="version-tabs-scroll" id="versionTabsContainer">
+                        <!-- Injected dynamically: e.g. <button class="version-tab active">Trad</button> -->
+                    </div>
+                    <div class="version-tab-actions">
+                        <button id="btnAddVersion" class="btn-add-version" title="Add new version / variation">+</button>
                     </div>
                 </div>
-                <div class="canvas-container">
-                    <canvas id="sheetCanvas"></canvas>
+                <div class="editor-wrapper">
+                    <textarea id="abcInput" spellcheck="false" placeholder="Enter ABC notation here..."></textarea>
                 </div>
-            </div>
-        </div>
+            </section>
 
-        <!-- Settings Modal -->
-        <div id="settingsModal" class="modal-overlay hidden">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h2>⚙️ Display Settings</h2>
-                    <button class="btn-close" id="btnCloseSettings">&times;</button>
-                </div>
-                <div class="settings-body" style="padding: 25px;">
-                    <div class="setting-group">
-                        <label for="transposeSelect">Transpose:</label>
-                        <select id="transposeSelect">
-                            <option value="0">No transpose</option>
-                            <option value="1">+1 semitone</option>
-                            <option value="2">+2 semitones</option>
-                            <option value="3">+3 semitones</option>
-                            <option value="4">+4 semitones</option>
-                            <option value="5">+5 semitones</option>
-                            <option value="6">+6 semitones</option>
-                            <option value="-1">-1 semitone</option>
-                            <option value="-2">-2 semitones</option>
-                            <option value="-3">-3 semitones</option>
-                            <option value="-4">-4 semitones</option>
-                            <option value="-5">-5 semitones</option>
-                            <option value="-6">-6 semitones</option>
+            <!-- Draggable Splitter Handle -->
+            <div class="resizer" id="dragResizer" title="ドラッグして境界を移動 (左右にリサイズ)"></div>
+
+            <!-- Right Panel: High-Resolution Sheet Music -->
+            <section class="viewer-pane">
+                <div class="pane-header">
+                    <h3>Lead Sheet Preview</h3>
+                    <div class="view-balance-controls">
+                        <label for="viewBalanceSelect">View:</label>
+                        <select id="viewBalanceSelect" class="styled-select-sm">
+                            <option value="1">Chord Only</option>
+                            <option value="2">Chord Focus</option>
+                            <option value="3" selected>Balanced</option>
+                            <option value="4">Melody Focus</option>
+                            <option value="5">Melody Max</option>
                         </select>
                     </div>
-
-                    <div class="setting-group">
-                        <label>
-                            <input type="checkbox" id="chordOnlyCheck">
-                            Chord Only Mode (No melody)
-                        </label>
-                    </div>
-
-                    <div class="setting-group">
-                        <label style="display: block; font-weight: bold; margin-bottom: 10px;">Chord Notation:</label>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                            <label><input type="checkbox" id="checkUseDelta"> Maj → Δ</label>
-                            <label><input type="checkbox" id="checkUseMinus"> m → -</label>
-                            <label><input type="checkbox" id="checkUsePlus"> aug → +</label>
-                            <label><input type="checkbox" id="checkUsePhi"> m7b5 → Φ</label>
-                            <label><input type="checkbox" id="checkUseDimMinus"> dim → -</label>
-                        </div>
-                    </div>
-
-                    <div class="setting-group">
-                        <label for="lineSpacingSlider">Line Spacing: <span id="lineSpacingValue">1.0</span>x</label>
-                        <input type="range" id="lineSpacingSlider" min="0.5" max="2.0" step="0.1" value="1.0"
-                            style="width:100%">
-                    </div>
-
-                    <div class="setting-group">
-                        <label for="chordSizeSlider">Chord Font Size: <span id="chordSizeValue">32</span>px</label>
-                        <input type="range" id="chordSizeSlider" min="8" max="48" step="1" value="24"
-                            style="width:100%">
-                    </div>
                 </div>
-                <div class="modal-footer" style="padding: 15px 25px; border-top: 1px solid #eee; text-align: right;">
-                    <button class="btn btn-secondary"
-                        onclick="document.getElementById('settingsModal').classList.add('hidden')">Close</button>
+                <div class="canvas-scroll-container" id="canvasContainer">
+                    <canvas id="sheetCanvas"></canvas>
+                </div>
+            </section>
+        </main>
+
+        <!-- Bottom Playback Control Bar -->
+        <footer class="playback-bar">
+            <!-- Playback Core Buttons -->
+            <div class="play-actions">
+                <button id="btnPlay" class="btn-playback btn-play" title="Play">▶</button>
+                <button id="btnStop" class="btn-playback btn-stop" title="Stop">⏹</button>
+                <button id="btnLoop" class="btn-toggle" title="Loop Playback">🔁 Loop</button>
+            </div>
+
+            <!-- Tempo (BPM) -->
+            <div class="tempo-control">
+                <label for="bpmSlider">BPM:</label>
+                <input type="range" id="bpmSlider" min="40" max="280" value="120" class="styled-slider">
+                <input type="number" id="bpmInput" min="40" max="280" value="120" class="bpm-number-input">
+            </div>
+
+            <!-- Rhythm Feel -->
+            <div class="rhythm-control">
+                <label>Feel:</label>
+                <div class="segmented-control" id="rhythmFeelGroup">
+                    <button data-feel="0" class="btn-segment active">Even</button>
+                    <button data-feel="1" class="btn-segment">Swing</button>
+                    <button data-feel="2" class="btn-segment">Shuffle</button>
                 </div>
             </div>
-        </div>
-    </div>
 
-    <!-- Help Modal -->
-    <div id="helpModal" class="modal-overlay hidden">
-        <div class="modal-content help-modal" style="max-width: 800px; width: 90%;">
-            <div class="modal-header">
-                <h2>Markup Help</h2>
-                <button class="btn-close" id="btnCloseHelp">&times;</button>
+            <!-- Volume Mixing -->
+            <div class="mixer-control">
+                <div class="vol-slider-wrap" title="Melody Volume">
+                    <span class="vol-label">Mel</span>
+                    <input type="range" id="volMelody" min="0" max="1" step="0.05" value="1.0" class="styled-slider-sm">
+                </div>
+                <div class="vol-slider-wrap" title="Chords Volume">
+                    <span class="vol-label">Chd</span>
+                    <input type="range" id="volChords" min="0" max="1" step="0.05" value="0.8" class="styled-slider-sm">
+                </div>
+                <div class="vol-slider-wrap" title="Bass Volume">
+                    <span class="vol-label">Bas</span>
+                    <input type="range" id="volBass" min="0" max="1" step="0.05" value="0.4" class="styled-slider-sm">
+                </div>
             </div>
-            <div id="helpContent" class="help-body"
-                style="padding: 25px; max-height: 70vh; overflow-y: auto; text-align: left; line-height: 1.6;">
-                Loading help...
+
+            <!-- Export -->
+            <div class="export-actions">
+                <button id="btnExportWav" class="btn btn-accent btn-sm" title="Export as lossless WAV audio">💾 WAV</button>
             </div>
-        </div>
+        </footer>
+
+        <!-- Floating Minimal Session Toolbar (Active in Fullscreen Zen Mode) -->
+        <aside id="zenToolbar" class="zen-floating-bar" aria-label="Fullscreen Session Controls">
+            <button id="zenBtnPlay" class="zen-btn zen-btn-play" title="Play / Pause">▶ Play</button>
+            <button id="zenBtnStop" class="zen-btn" title="Stop">⏹</button>
+            <div class="zen-divider"></div>
+            <button id="zenBtnForum" class="zen-btn" title="Open Forum">🌐 Forum</button>
+            <div class="zen-divider"></div>
+            <div class="zen-btn-group">
+                <button id="zenBtnTransposeDown" class="zen-btn zen-btn-sm" title="Transpose -1">-1</button>
+                <span id="zenTransposeDisplay" class="zen-label">Orig</span>
+                <button id="zenBtnTransposeUp" class="zen-btn zen-btn-sm" title="Transpose +1">+1</button>
+            </div>
+            <div class="zen-divider"></div>
+            <select id="zenViewBalanceSelect" class="zen-select" title="View Balance">
+                <option value="1">Chord Only</option>
+                <option value="2">Chord Focus</option>
+                <option value="3" selected>Balanced</option>
+                <option value="4">Melody Focus</option>
+                <option value="5">Melody Max</option>
+            </select>
+            <div class="zen-divider"></div>
+            <button id="zenBtnExit" class="zen-btn zen-btn-exit" title="Exit Fullscreen (Esc)">✕ Exit</button>
+        </aside>
     </div>
 
     <!-- Forum Modal -->
     <div id="forumModal" class="modal-overlay hidden">
-        <div class="modal-content forum-modal">
+        <div class="modal-card forum-modal-card">
             <div class="modal-header">
-                <h2>🌐 Sheet Music Forum</h2>
-                <button class="btn-close" id="btnCloseForum">&times;</button>
+                <div class="modal-title-wrap">
+                    <span class="modal-icon">🌐</span>
+                    <h2>Sheet Music Forum</h2>
+                </div>
+                <button class="btn-close" id="btnCloseForum" title="Close">&times;</button>
             </div>
             <div class="forum-controls">
-                <input type="text" id="forumSearch" placeholder="Search by title...">
-                <div class="sort-buttons">
-                    <button id="btnSortPopular" class="btn btn-small btn-active">Popular</button>
-                    <button id="btnSortLatest" class="btn btn-small">Latest</button>
+                <div class="forum-search-wrap">
+                    <span class="search-icon">🔍</span>
+                    <input type="text" id="forumSearch" placeholder="Search by song title or author..." class="styled-input">
+                </div>
+                <div class="forum-sort-group">
+                    <button id="btnSortPopular" class="btn btn-sm btn-filter btn-active">🔥 Popular</button>
+                    <button id="btnSortLatest" class="btn btn-sm btn-filter">⏱️ Latest</button>
+                    <button id="btnOpenPostModal" class="btn btn-sm btn-accent" style="font-weight:600;">+ Post Current Sheet</button>
                 </div>
             </div>
-            <div id="forumLoading" class="loading-spinner hidden">Loading...</div>
+            <div id="forumLoading" class="loading-spinner hidden">
+                <div class="spinner"></div>
+                <span>Loading forum sheets...</span>
+            </div>
             <div id="forumList" class="forum-list">
-                <!-- Song items will be injected here -->
+                <!-- Injected dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Post Sheet Modal -->
+    <div id="postModal" class="modal-overlay hidden">
+        <div class="modal-card modal-card-sm">
+            <div class="modal-header">
+                <div class="modal-title-wrap">
+                    <span class="modal-icon">📤</span>
+                    <h2>Post Sheet to Forum</h2>
+                </div>
+                <button class="btn-close" id="btnClosePost">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="postTitle">Song Title:</label>
+                    <input type="text" id="postTitle" placeholder="e.g., Liminesence" class="styled-input">
+                </div>
+                <div class="form-group">
+                    <label for="postAuthor">Author / Contributor Name:</label>
+                    <input type="text" id="postAuthor" placeholder="e.g., Jazz Player" class="styled-input">
+                </div>
+                <p class="form-note">Current ABC notation in the editor will be shared with all users.</p>
+                <div class="modal-actions">
+                    <button id="btnSubmitPost" class="btn btn-primary" style="font-weight:600;">Post to Forum</button>
+                    <button id="btnCancelPost" class="btn btn-tool">Cancel</button>
+                </div>
             </div>
         </div>
     </div>
 
     <!-- Video Modal -->
     <div id="videoModal" class="modal-overlay hidden">
-        <div class="modal-content video-modal">
+        <div class="modal-card modal-card-sm">
             <div class="modal-header">
-                <h2 id="videoModalTitle">Videos</h2>
+                <div class="modal-title-wrap">
+                    <span class="modal-icon">🎥</span>
+                    <h2 id="videoModalTitle">YouTube Videos</h2>
+                </div>
                 <button class="btn-close" id="btnCloseVideo">&times;</button>
             </div>
-            <div class="video-controls" style="padding: 15px 25px;">
-                <button id="btnAddVideo" class="btn btn-primary">+ Add YouTube Video</button>
+            <div class="video-modal-controls">
+                <button id="btnAddVideo" class="btn btn-primary btn-sm">+ Add YouTube Video</button>
             </div>
             <div id="videoList" class="video-list">
-                <!-- Video items will be injected here -->
-            </div>
-        </div>
-    </div>
-
-    <!-- AI Composer Modal -->
-    <div id="aiModal" class="modal-overlay hidden">
-        <div class="modal-content ai-modal">
-            <div class="modal-header">
-                <h2>🤖 AI Composer</h2>
-                <button class="btn-close" id="btnCloseAI">&times;</button>
-            </div>
-            <div class="ai-body" style="padding: 25px;">
-                <p>Select a jazz style to generate a Gemini API prompt:</p>
-                <div class="style-buttons">
-                    <button class="style-btn" data-style="standard">STANDARD</button>
-                    <button class="style-btn" data-style="bebop">BEBOP</button>
-                    <button class="style-btn" data-style="hardbop">HARD BOP</button>
-                    <button class="style-btn" data-style="contemporary">CONTEMPORARY</button>
-                    <button class="style-btn" data-style="modal">MODAL JAZZ</button>
-                </div>
-                <div style="margin-top: 20px; display: flex; gap: 15px; align-items: center;">
-                    <div style="flex: 1;">
-                        <label for="keySelect">Key:</label>
-                        <select id="keySelect"
-                            style="width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ddd; border-radius: 8px;">
-                            <option value="C">C Major</option>
-                            <option value="F">F Major</option>
-                            <option value="Bb">Bb Major</option>
-                            <option value="Eb">Eb Major</option>
-                            <option value="Ab">Ab Major</option>
-                            <option value="Db">Db Major</option>
-                            <option value="Gb">Gb Major</option>
-                            <option value="B">B Major</option>
-                            <option value="E">E Major</option>
-                            <option value="A">A Major</option>
-                            <option value="D">D Major</option>
-                            <option value="G">G Major</option>
-                            <option value="Am">A Minor</option>
-                            <option value="Dm">D Minor</option>
-                            <option value="Gm">G Minor</option>
-                            <option value="Cm">C Minor</option>
-                            <option value="Fm">F Minor</option>
-                            <option value="Bbm">Bb Minor</option>
-                            <option value="Ebm">Eb Minor</option>
-                            <option value="G#m">G# Minor</option>
-                            <option value="C#m">C# Minor</option>
-                            <option value="F#m">F# Minor</option>
-                            <option value="Bm">B Minor</option>
-                            <option value="Em">E Minor</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div id="densityControl" style="margin-top: 15px;">
-                    <label for="noteDensitySlider">Note Density (音の数): <span id="noteDensityValue">Medium</span></label>
-                    <input type="range" id="noteDensitySlider" min="1" max="5" value="3" step="1" style="width: 100%;">
-                    <div style="display: flex; justify-content: space-between; font-size: 12px; color: #666;">
-                        <span>Few (Long Tones)</span>
-                        <span>Many (Fine)</span>
-                    </div>
-                </div>
-                <div style="margin-top: 15px;">
-                    <label for="customPrompt">Or enter custom prompt:</label>
-                    <input type="text" id="customPrompt" placeholder="e.g., slow ballad in minor"
-                        style="width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ddd; border-radius: 8px;">
-                </div>
-                <div class="dialog-buttons" style="margin-top: 25px; display: flex; gap: 10px;">
-                    <button class="btn btn-primary" id="btnCopyPrompt" style="flex: 2;">Copy Prompt to
-                        Clipboard</button>
-                    <button class="btn btn-secondary"
-                        onclick="document.getElementById('aiModal').classList.add('hidden')"
-                        style="flex: 1;">Close</button>
-                </div>
+                <!-- Injected dynamically -->
             </div>
         </div>
     </div>
@@ -293,16 +252,15 @@
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
-    <!-- Scripts -->
-    <script src="js/models.js"></script>
-    <script src="js/music-utils.js"></script>
-    <script src="js/abc-converter.js"></script>
-    <script src="js/parser.js"></script>
-    <script src="js/renderer.js"></script>
-    <script src="js/firebase-config.js"></script>
-    <script src="js/forum.js"></script>
-    <script src="js/audio-player.js"></script>
-    <script src="js/app.js"></script>
+    <!-- Application Scripts -->
+    <script src="js/models.js?v=6"></script>
+    <script src="js/multi-tune-helper.js?v=6"></script>
+    <script src="js/parser.js?v=6"></script>
+    <script src="js/abc-converter.js?v=6"></script>
+    <script src="js/renderer.js?v=6"></script>
+    <script src="js/firebase-config.js?v=6"></script>
+    <script src="js/forum.js?v=6"></script>
+    <script src="js/audio-player.js?v=6"></script>
+    <script src="js/app.js?v=6"></script>
 </body>
-
 </html>

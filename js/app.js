@@ -1,644 +1,994 @@
 /**
- * Main Application Logic
- * Wires together parser, renderer, and UI
+ * Main Application Controller
+ * Connects LeadSheetParser, LeadSheetRenderer, and AudioPlayer.
  */
 
-class LeadSheetApp {
+// Default lead sheet: Danny Boy with 3 variations (Trad, Jazz Ballad, Jazz Swing)
+const DEFAULT_ABC = `X:1
+T: Danny Boy
+T: Trad
+G: sample, traditional, ballad, swing
+L:1/4
+Q: 1/4=116
+K: G
+"N.C" FGA |
+|:"G" B3A |"G" BedB | "CM" A G E2 |"CM" zGBc |
+"G"d3e |"Em" dBGB | "Am"A4 |"D7" z FGA |
+"G"B3 A |"G"Be dB | "CM"AG E2 |"Cm" z F G A |
+"G"B3c |"CM" BA "D7"GA |"G"G4 |"D7"z d e f |
+"G"g3 f |"C" fe de |"G"d B G2 |"G" zdef | 
+"G"g3  f |"C" fe dB | "Am"A4 |"D7"zded |
+"G" b3 a |"C" ag eg |"G"dB G2 |"C" z FGA | 
+"G"Be dB |"C"AG EF | "G"G4 |"G"z4 :|]
+
+X:2
+T: Danny Boy
+T: Jazz Ballad
+L:1/4
+Q: 1/4=116
+K: G
+"N.C" FGA |
+|:"G" B3A |"G7/F" BedB | "CM" A G E2 |"Cm" zGBc |
+"G"d2- "F#m7b5" de |"Em7" dB "A7"GB | "Am7"A4 |"D7" z FGA |
+"G"B3 A |"G7/F"Be dB | "CM"AG E2 |"Cm" z F G A |
+"G"B2- "Em" Bc |"Am7" BA "D7"GA |"G"G2- "CM"G2 |"Am7"z d "D7"e f |
+"G"g3 f |"CM" fe de |"G"d B "CM" G2 | "F#m7b5"zd"B7"ef | 
+"Em"g3  f |"A7" fe dB | "Am7"A4 |"D7"zded |
+"G7" b2- "F7"ba |"C" ag "C#o"eg |"D7"dB "B7/D#"G2 |"Em" z FGA | 
+"G"Be "Em7"dB |"Am7"AG "D7" EF | "G"G2- "CM"G2 |"G"z4 :|]
+
+X:3
+T: Danny Boy
+T: Jazz Swing
+L: 1/8
+Q: 1/4=90
+K: G
+"N.C." FGA |
+|: "Gmaj7" B3A BedB | "Cmaj7" A G E2 "Cm6" zGBc | "G/B" d3e "Bbdim7" dBGB | "Am7" A4 "D7" z FGA |
+"Gmaj7" B3 A "G7/F" Be dB | "Cmaj7/E" AG E2 "Cm6/Eb" z F G A | "G/D" B3c "D7" BAGA | "G6" G4 "D7" z d e f |
+"G" g3 f "CM"fe de | "G" d B G2 "CM"zdef | "Bm7" g3 f "E7" fe dB | "Am7" A4 "D7" zded |
+"G" b3 a "CM"ag eg | "Bm7" dB G2 "Bb7" z FGA | "Am7" Be dB "Ab7" AGEF | "G6" G4 "D7" z4 :|]`;
+
+class AppController {
     constructor() {
-        this.canvas = document.getElementById('sheetCanvas');
-        this.markupInput = document.getElementById('markupInput');
-        this.renderer = new LeadSheetRenderer(this.canvas);
-
-        // Initialize canvas size with HiDPI support
-        const dpr = window.devicePixelRatio || 1;
-        const logicalWidth = 2000;
-        const logicalHeight = 800;
-
-        this.canvas.width = logicalWidth * dpr;
-        this.canvas.height = logicalHeight * dpr;
-        this.canvas.style.width = logicalWidth + 'px';
-        this.canvas.style.height = logicalHeight + 'px';
-
-        this.renderer.ctx.scale(dpr, dpr);
-
-        if (window.db && window.userUuid) {
-            this.forum = new Forum(window.db, window.userUuid);
-        }
-
+        this.parser = LeadSheetParser;
+        this.renderer = null;
         this.player = new AudioPlayer();
-        this.initializeUI();
-        this.loadSampleMarkup();
+        this.forum = null;
 
-        // Ensure first render after fonts are ready
-        document.fonts.ready.then(() => {
-            console.log('Fonts ready, triggering initial render');
-            this.parseAndRender();
-        });
+        this.currentSheet = null;
+        this.semitoneShift = 0;
+        this.originalAbc = "";
+        this.debounceTimer = null;
+        this.forumSongs = [];
+        this.currentForumSort = "likes";
+
+        // Multi-Tune / Version state
+        this.currentTunes = [];
+        this.currentTuneIndex = 0;
+        this.isSwitchingTune = false;
+
+        this.initDOMElements();
+        this.initRenderer();
+        this.initPlayerCallbacks();
+        this.initForum();
+        this.bindEvents();
+        this.bindResizerEvents();
+
+        // Load Danny Boy with all 3 versions as default
+        this.loadDefaultSong();
     }
 
-    initializeUI() {
-        // Markup input - real-time rendering
-        this.markupInput.addEventListener('input', () => {
-            this.parseAndRender();
+    initForum() {
+        if (typeof Forum !== 'undefined' && window.db && window.userUuid) {
+            this.forum = new Forum(window.db, window.userUuid);
+        } else {
+            console.warn("Forum or Firebase not ready yet.");
+        }
+    }
+
+    initDOMElements() {
+        this.el = {
+            abcInput: document.getElementById("abcInput"),
+            canvas: document.getElementById("sheetCanvas"),
+            canvasContainer: document.getElementById("canvasContainer"),
+            editorPane: document.querySelector(".editor-pane"),
+            dragResizer: document.getElementById("dragResizer"),
+            btnTransposeDown: document.getElementById("btnTransposeDown"),
+            btnTransposeUp: document.getElementById("btnTransposeUp"),
+            transposeDisplay: document.getElementById("transposeDisplay"),
+            btnToggleL: document.getElementById("btnToggleL"),
+            btnThemeToggle: document.getElementById("btnThemeToggle"),
+            btnCopy: document.getElementById("btnCopy"),
+            btnClear: document.getElementById("btnClear"),
+            viewBalanceSelect: document.getElementById("viewBalanceSelect"),
+            btnPlay: document.getElementById("btnPlay"),
+            btnStop: document.getElementById("btnStop"),
+            btnLoop: document.getElementById("btnLoop"),
+            bpmSlider: document.getElementById("bpmSlider"),
+            bpmInput: document.getElementById("bpmInput"),
+            rhythmFeelGroup: document.getElementById("rhythmFeelGroup"),
+            volMelody: document.getElementById("volMelody"),
+            volChords: document.getElementById("volChords"),
+            volBass: document.getElementById("volBass"),
+            workspace: document.querySelector(".workspace"),
+            btnToggleEditor: document.getElementById("btnToggleEditor"),
+            btnZenMode: document.getElementById("btnZenMode"),
+            zenToolbar: document.getElementById("zenToolbar"),
+            zenBtnPlay: document.getElementById("zenBtnPlay"),
+            zenBtnStop: document.getElementById("zenBtnStop"),
+            zenBtnTransposeDown: document.getElementById("zenBtnTransposeDown"),
+            zenBtnTransposeUp: document.getElementById("zenBtnTransposeUp"),
+            zenTransposeDisplay: document.getElementById("zenTransposeDisplay"),
+            zenViewBalanceSelect: document.getElementById("zenViewBalanceSelect"),
+            zenBtnExit: document.getElementById("zenBtnExit"),
+            btnExportWav: document.getElementById("btnExportWav"),
+            // Forum Elements
+            btnForum: document.getElementById("btnForum"),
+            btnShareForum: document.getElementById("btnShareForum"),
+            zenBtnForum: document.getElementById("zenBtnForum"),
+            forumModal: document.getElementById("forumModal"),
+            btnCloseForum: document.getElementById("btnCloseForum"),
+            forumSearch: document.getElementById("forumSearch"),
+            btnSortPopular: document.getElementById("btnSortPopular"),
+            btnSortLatest: document.getElementById("btnSortLatest"),
+            btnOpenPostModal: document.getElementById("btnOpenPostModal"),
+            forumLoading: document.getElementById("forumLoading"),
+            forumList: document.getElementById("forumList"),
+            postModal: document.getElementById("postModal"),
+            btnClosePost: document.getElementById("btnClosePost"),
+            btnCancelPost: document.getElementById("btnCancelPost"),
+            btnSubmitPost: document.getElementById("btnSubmitPost"),
+            postTitle: document.getElementById("postTitle"),
+            postAuthor: document.getElementById("postAuthor"),
+            videoModal: document.getElementById("videoModal"),
+            btnCloseVideo: document.getElementById("btnCloseVideo"),
+            videoModalTitle: document.getElementById("videoModalTitle"),
+            btnAddVideo: document.getElementById("btnAddVideo"),
+            videoList: document.getElementById("videoList"),
+            toast: document.getElementById("toast"),
+            // Version Tabs Elements
+            versionTabBar: document.getElementById("versionTabBar"),
+            versionTabsContainer: document.getElementById("versionTabsContainer"),
+            btnAddVersion: document.getElementById("btnAddVersion")
+        };
+    }
+
+    initRenderer() {
+        this.renderer = new LeadSheetRenderer(this.el.canvas);
+    }
+
+    initPlayerCallbacks() {
+        this.player.onPlaybackStateChanged = (isPlaying) => {
+            if (isPlaying) {
+                this.el.btnPlay.textContent = "⏸";
+                this.el.btnPlay.classList.add("playing");
+                if (this.el.zenBtnPlay) {
+                    this.el.zenBtnPlay.textContent = "⏸ Pause";
+                    this.el.zenBtnPlay.classList.add("playing");
+                }
+            } else {
+                this.el.btnPlay.textContent = "▶";
+                this.el.btnPlay.classList.remove("playing");
+                if (this.el.zenBtnPlay) {
+                    this.el.zenBtnPlay.textContent = "▶ Play";
+                    this.el.zenBtnPlay.classList.remove("playing");
+                }
+                this.renderer.setPlaybackMeasure(null);
+                this.renderer.setPlaybackHighlightedElement(null);
+            }
+        };
+
+        this.player.onMeasurePlayback = (seqIdx, measure) => {
+            this.renderer.setPlaybackMeasure(measure);
+        };
+
+        this.player.onElementPlayback = (seqIdx, measure, element, sourcePos) => {
+            this.renderer.setPlaybackHighlightedElement(element);
+        };
+
+        this.player.onPlaybackStopped = () => {
+            this.renderer.setPlaybackMeasure(null);
+            this.renderer.setPlaybackHighlightedElement(null);
+        };
+    }
+
+    bindEvents() {
+        // ABC Text Editor input with debouncing
+        this.el.abcInput.addEventListener("input", () => {
+            if (this.isSwitchingTune) return;
+            clearTimeout(this.debounceTimer);
+            this.debounceTimer = setTimeout(() => {
+                const currentText = this.el.abcInput.value;
+                // Check if user pasted a multi-tune document with multiple X:
+                const detectedTunes = MultiTuneHelper.splitTunes(currentText);
+                if (detectedTunes.length > 1 && this.currentTunes.length <= 1) {
+                    this.loadFullSong(currentText);
+                    return;
+                }
+
+                if (this.currentTuneIndex >= 0 && this.currentTuneIndex < this.currentTunes.length) {
+                    this.currentTunes[this.currentTuneIndex].content = currentText;
+                    MultiTuneHelper.refreshTuneMetadata(this.currentTunes[this.currentTuneIndex]);
+                    this.updateCurrentTabTitle();
+                }
+
+                this.originalAbc = currentText;
+                this.semitoneShift = 0;
+                this.updateTransposeDisplay();
+                this.reparseAndRender();
+            }, 120);
         });
 
-        // Sample button
-        document.getElementById('btnSample').addEventListener('click', () => {
-            this.loadSampleMarkup();
+        // Version Tabs add button
+        if (this.el.btnAddVersion) {
+            this.el.btnAddVersion.addEventListener("click", () => this.addNewVersionDialog());
+        }
+
+        // Transpose buttons
+        this.el.btnTransposeDown.addEventListener("click", () => this.shiftKey(-1));
+        this.el.btnTransposeUp.addEventListener("click", () => this.shiftKey(1));
+
+        // Forum Modal Buttons
+        if (this.el.btnForum) {
+            this.el.btnForum.addEventListener("click", () => this.showForumModal());
+        }
+        if (this.el.zenBtnForum) {
+            this.el.zenBtnForum.addEventListener("click", () => this.showForumModal());
+        }
+        if (this.el.btnShareForum) {
+            this.el.btnShareForum.addEventListener("click", () => this.showPostModal());
+        }
+        if (this.el.btnCloseForum) {
+            this.el.btnCloseForum.addEventListener("click", () => {
+                this.el.forumModal.classList.add("hidden");
+            });
+        }
+        if (this.el.forumSearch) {
+            this.el.forumSearch.addEventListener("input", (e) => {
+                this.renderForumList(e.target.value);
+            });
+        }
+        if (this.el.btnSortPopular) {
+            this.el.btnSortPopular.addEventListener("click", () => {
+                this.currentForumSort = "likes";
+                this.el.btnSortPopular.classList.add("btn-active");
+                if (this.el.btnSortLatest) this.el.btnSortLatest.classList.remove("btn-active");
+                this.loadAndRenderForum();
+            });
+        }
+        if (this.el.btnSortLatest) {
+            this.el.btnSortLatest.addEventListener("click", () => {
+                this.currentForumSort = "timestamp";
+                this.el.btnSortLatest.classList.add("btn-active");
+                if (this.el.btnSortPopular) this.el.btnSortPopular.classList.remove("btn-active");
+                this.loadAndRenderForum();
+            });
+        }
+        if (this.el.btnOpenPostModal) {
+            this.el.btnOpenPostModal.addEventListener("click", () => {
+                this.showPostModal();
+            });
+        }
+
+        // Post Sheet Modal Buttons
+        if (this.el.btnClosePost) {
+            this.el.btnClosePost.addEventListener("click", () => this.hidePostModal());
+        }
+        if (this.el.btnCancelPost) {
+            this.el.btnCancelPost.addEventListener("click", () => this.hidePostModal());
+        }
+        if (this.el.btnSubmitPost) {
+            this.el.btnSubmitPost.addEventListener("click", () => this.submitPost());
+        }
+
+        // Video Modal Buttons
+        if (this.el.btnCloseVideo) {
+            this.el.btnCloseVideo.addEventListener("click", () => {
+                this.el.videoModal.classList.add("hidden");
+            });
+        }
+
+        // Toggle L: 1/8 ⇔ L: 1/4
+        this.el.btnToggleL.addEventListener("click", () => {
+            const currentText = this.el.abcInput.value;
+            const converted = ABCConverter.toggleUnitNoteLength(currentText);
+            this.el.abcInput.value = converted;
+            this.originalAbc = converted;
+            this.reparseAndRender();
         });
 
-        // Help button
-        document.getElementById('btnHelp').addEventListener('click', () => {
-            this.showHelpModal();
+        // Dark/Light Theme
+        this.el.btnThemeToggle.addEventListener("click", () => {
+            const isDark = document.body.classList.toggle("dark-theme");
+            this.el.btnThemeToggle.textContent = isDark ? "☀️" : "🌙";
+            this.renderer.setDarkMode(isDark);
+        });
+
+        // Copy button (copies full multi-tune document if multiple versions exist)
+        this.el.btnCopy.addEventListener("click", () => {
+            if (this.currentTuneIndex >= 0 && this.currentTuneIndex < this.currentTunes.length) {
+                this.currentTunes[this.currentTuneIndex].content = this.el.abcInput.value;
+            }
+            const fullText = (this.currentTunes.length > 1)
+                ? MultiTuneHelper.combineTunes(this.currentTunes)
+                : this.el.abcInput.value;
+
+            navigator.clipboard.writeText(fullText).then(() => {
+                const prev = this.el.btnCopy.textContent;
+                this.el.btnCopy.textContent = "Copied!";
+                setTimeout(() => this.el.btnCopy.textContent = prev, 1200);
+            });
         });
 
         // Clear button
-        document.getElementById('btnClear').addEventListener('click', () => {
-            this.markupInput.value = '';
-            this.parseAndRender();
+        this.el.btnClear.addEventListener("click", () => {
+            if (confirm("Clear current version editor content?")) {
+                this.el.abcInput.value = "";
+                this.originalAbc = "";
+                if (this.currentTuneIndex >= 0 && this.currentTuneIndex < this.currentTunes.length) {
+                    this.currentTunes[this.currentTuneIndex].content = "";
+                    MultiTuneHelper.refreshTuneMetadata(this.currentTunes[this.currentTuneIndex]);
+                    this.updateCurrentTabTitle();
+                }
+                this.semitoneShift = 0;
+                this.updateTransposeDisplay();
+                this.reparseAndRender();
+            }
         });
 
-        // Settings button
-        document.getElementById('btnSettings').addEventListener('click', () => {
-            const modal = document.getElementById('settingsModal');
-            modal.classList.remove('hidden');
+        // Editor Toggle (Session mode vs Edit mode)
+        if (this.el.btnToggleEditor) {
+            this.el.btnToggleEditor.addEventListener("click", () => {
+                const isHidden = this.el.workspace.classList.toggle("editor-hidden");
+                this.el.btnToggleEditor.textContent = isHidden ? "📝 Edit Mode" : "📄 Sheet Only";
+                this.el.btnToggleEditor.classList.toggle("active", isHidden);
+                setTimeout(() => {
+                    this.renderer.render();
+                }, 220);
+            });
+        }
+
+        // Fullscreen Session (Zen Mode) Toggle
+        if (this.el.btnZenMode) {
+            this.el.btnZenMode.addEventListener("click", () => this.toggleZenMode());
+        }
+        if (this.el.zenBtnExit) {
+            this.el.zenBtnExit.addEventListener("click", () => this.toggleZenMode(false));
+        }
+        if (this.el.zenBtnPlay) {
+            this.el.zenBtnPlay.addEventListener("click", () => {
+                if (this.player.isPlaying) {
+                    this.player.stop();
+                } else {
+                    if (!this.currentSheet) this.reparseAndRender();
+                    this.player.play(this.currentSheet);
+                }
+            });
+        }
+        if (this.el.zenBtnStop) {
+            this.el.zenBtnStop.addEventListener("click", () => this.player.stop());
+        }
+        if (this.el.zenBtnTransposeDown) {
+            this.el.zenBtnTransposeDown.addEventListener("click", () => this.shiftKey(-1));
+        }
+        if (this.el.zenBtnTransposeUp) {
+            this.el.zenBtnTransposeUp.addEventListener("click", () => this.shiftKey(1));
+        }
+
+        // View Balance level synchronization
+        this.el.viewBalanceSelect.addEventListener("change", (e) => {
+            const val = e.target.value;
+            if (this.el.zenViewBalanceSelect) this.el.zenViewBalanceSelect.value = val;
+            this.renderer.setViewBalance(parseInt(val, 10));
+        });
+        if (this.el.zenViewBalanceSelect) {
+            this.el.zenViewBalanceSelect.addEventListener("change", (e) => {
+                const val = e.target.value;
+                this.el.viewBalanceSelect.value = val;
+                this.renderer.setViewBalance(parseInt(val, 10));
+            });
+        }
+
+        // Keyboard shortcuts: Esc for Zen Mode Exit
+        document.addEventListener("keydown", (e) => {
+            if (e.key === "Escape" && document.body.classList.contains("zen-mode")) {
+                this.toggleZenMode(false);
+            }
         });
 
-        // AI Composer button
-        document.getElementById('btnAI').addEventListener('click', () => {
-            this.showAIComposerDialog();
-        });
-
-        // Forum button
-        document.getElementById('btnForum').addEventListener('click', () => {
-            this.showForumModal();
-        });
-
-        // Share to Forum button
-        document.getElementById('btnShareForum').addEventListener('click', () => {
-            this.shareToForum();
-        });
-
-        // Modal close buttons
-        document.getElementById('btnCloseForum').addEventListener('click', () => {
-            document.getElementById('forumModal').classList.add('hidden');
-        });
-
-        document.getElementById('btnCloseVideo').addEventListener('click', () => {
-            document.getElementById('videoModal').classList.add('hidden');
-        });
-
-        document.getElementById('btnCloseSettings').addEventListener('click', () => {
-            document.getElementById('settingsModal').classList.add('hidden');
-        });
-
-        document.getElementById('btnCloseAI').addEventListener('click', () => {
-            document.getElementById('aiModal').classList.add('hidden');
-        });
-
-        document.getElementById('btnCloseHelp').addEventListener('click', () => {
-            document.getElementById('helpModal').classList.add('hidden');
-        });
-
-        // Forum controls
-        document.getElementById('forumSearch').addEventListener('input', (e) => {
-            this.renderForumList(e.target.value);
-        });
-
-        document.getElementById('btnSortPopular').addEventListener('click', () => {
-            this.currentForumSort = 'likes';
-            document.getElementById('btnSortPopular').classList.add('btn-active');
-            document.getElementById('btnSortLatest').classList.remove('btn-active');
-            this.loadAndRenderForum();
-        });
-
-        document.getElementById('btnSortLatest').addEventListener('click', () => {
-            this.currentForumSort = 'timestamp';
-            document.getElementById('btnSortLatest').classList.add('btn-active');
-            document.getElementById('btnSortPopular').classList.remove('btn-active');
-            this.loadAndRenderForum();
-        });
-
-        // Transpose control
-        document.getElementById('transposeSelect').addEventListener('change', (e) => {
-            this.renderer.setTransposeOffset(parseInt(e.target.value));
-            this.renderer.render();
-        });
-
-        // Chord-only mode
-        document.getElementById('chordOnlyCheck').addEventListener('change', (e) => {
-            this.renderer.setChordOnlyMode(e.target.checked);
-            this.renderer.render();
-        });
-
-        // Line spacing
-        const lineSpacingSlider = document.getElementById('lineSpacingSlider');
-        const lineSpacingValue = document.getElementById('lineSpacingValue');
-        lineSpacingSlider.addEventListener('input', (e) => {
-            const value = parseFloat(e.target.value);
-            lineSpacingValue.textContent = value.toFixed(1);
-            this.renderer.setLineSpacingScale(value);
-            this.renderer.render();
-        });
-
-        // Chord font size
-        const chordSizeSlider = document.getElementById('chordSizeSlider');
-        const chordSizeValue = document.getElementById('chordSizeValue');
-
-        // Sync initial value from slider to label and renderer
-        chordSizeValue.textContent = chordSizeSlider.value;
-        this.renderer.chordFontSize = parseInt(chordSizeSlider.value);
-
-        chordSizeSlider.addEventListener('input', (e) => {
-            const value = parseInt(e.target.value);
-            chordSizeValue.textContent = value;
-            this.renderer.chordFontSize = value;
-            this.renderer.render();
-        });
-
-        // Chord Notation Toggles
-        document.getElementById('checkUseDelta').addEventListener('change', (e) => {
-            this.renderer.useDelta = e.target.checked;
-            this.renderer.render();
-        });
-        document.getElementById('checkUseMinus').addEventListener('change', (e) => {
-            this.renderer.useMinus = e.target.checked;
-            this.renderer.render();
-        });
-        document.getElementById('checkUsePlus').addEventListener('change', (e) => {
-            this.renderer.usePlus = e.target.checked;
-            this.renderer.render();
-        });
-        document.getElementById('checkUsePhi').addEventListener('change', (e) => {
-            this.renderer.usePhi = e.target.checked;
-            this.renderer.render();
-        });
-        document.getElementById('checkUseDimMinus').addEventListener('change', (e) => {
-            this.renderer.useDimMinus = e.target.checked;
-            this.renderer.render();
-        });
-
-        // --- Playback Controls ---
-        document.getElementById('btnPlay').addEventListener('click', () => {
+        // Playback controls
+        this.el.btnPlay.addEventListener("click", () => {
             if (this.player.isPlaying) {
                 this.player.stop();
-                document.getElementById('btnPlay').textContent = '▶';
             } else {
-                if (!this.renderer.sheetMusic) return;
-                this.player.play(this.renderer.sheetMusic);
-                document.getElementById('btnPlay').textContent = '⏸';
+                if (!this.currentSheet) this.reparseAndRender();
+                this.player.play(this.currentSheet);
             }
         });
 
-        document.getElementById('btnStop').addEventListener('click', () => {
+        this.el.btnStop.addEventListener("click", () => {
             this.player.stop();
-            document.getElementById('btnPlay').textContent = '▶';
         });
 
-        const bpmSlider = document.getElementById('bpmSlider');
-        const bpmValue = document.getElementById('bpmValue');
-        bpmSlider.addEventListener('input', (e) => {
-            const val = parseInt(e.target.value);
-            bpmValue.textContent = val;
-            this.player.setBpm(val);
+        this.el.btnLoop.addEventListener("click", () => {
+            const isLoop = !this.player.isLooping;
+            this.player.setLooping(isLoop);
+            this.el.btnLoop.classList.toggle("active", isLoop);
         });
 
-        // Listen for playback end
-        window.addEventListener('playback-ended', () => {
-            document.getElementById('btnPlay').textContent = '▶';
-        });
-
-        // Mute Controls
-        const updateMuteState = () => {
-            const muteMel = document.getElementById('checkMuteMelody').checked;
-            const muteAcc = document.getElementById('checkMuteChords').checked;
-            this.player.setMute(muteMel, muteAcc);
+        // BPM slider and input
+        const syncBpm = (val) => {
+            const bpm = Math.max(20, Math.min(320, parseInt(val, 10) || 120));
+            this.el.bpmSlider.value = bpm;
+            this.el.bpmInput.value = bpm;
+            this.player.setBpm(bpm);
         };
+        this.el.bpmSlider.addEventListener("input", (e) => syncBpm(e.target.value));
+        this.el.bpmInput.addEventListener("change", (e) => syncBpm(e.target.value));
 
-        document.getElementById('checkMuteMelody').addEventListener('change', updateMuteState);
-        document.getElementById('checkMuteChords').addEventListener('change', updateMuteState);
-
-        document.getElementById('checkJazzMode').addEventListener('change', (e) => {
-            this.player.setJazzMode(e.target.checked);
+        // Rhythm feel (Even, Swing, Shuffle)
+        const feelButtons = this.el.rhythmFeelGroup.querySelectorAll(".btn-segment");
+        feelButtons.forEach((btn) => {
+            btn.addEventListener("click", () => {
+                feelButtons.forEach(b => b.classList.remove("active"));
+                btn.classList.add("active");
+                const feel = parseInt(btn.getAttribute("data-feel"), 10);
+                this.player.setRhythmFeel(feel);
+                if (this.player.isPlaying) {
+                    this.player.stop();
+                    this.player.play(this.currentSheet);
+                }
+            });
         });
-    }
 
-    parseAndRender() {
-        let markup = this.markupInput.value;
-
-        if (!markup.trim()) {
-            // Clear canvas if empty
-            this.renderer.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-            this.renderer.ctx.fillStyle = '#ffffff';
-            this.renderer.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-            return;
-        }
-
-        if (typeof ABCConverter !== 'undefined' && ABCConverter.isABCNotation(markup)) {
-            const converted = ABCConverter.convert(markup);
-            this.markupInput.value = converted;
-            markup = converted;
-            this.showToast('ABC notation converted to markup!');
-        }
-
-        try {
-            const sheetMusic = LeadSheetParser.parse(markup);
-            this.renderer.setSheetMusic(sheetMusic);
-            this.renderer.render();
-        } catch (error) {
-            console.error('Parsing error:', error);
-            // Show error in canvas
-            this.renderer.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-            this.renderer.ctx.fillStyle = '#ffffff';
-            this.renderer.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-            this.renderer.ctx.font = '16px sans-serif';
-            this.renderer.ctx.fillStyle = '#ff0000';
-            this.renderer.ctx.fillText('Parsing Error: ' + error.message, 20, 40);
-        }
-    }
-
-    loadSampleMarkup() {
-        const sample = `title:Beautiful Love
-key:Dm
-"N.C"defnl
-[A]|:"Em7-5"a3g
-"A7"fede
-"Dm7"f4
-"Dm7"rfga
-"Gm7"hc3b-
-"C7"agfg
-"Fmaj"a4
-"Em7-5"ra"A7"bhc+|
-
-[B](1)"Dm7"hehd3
-"G7"hcb-2d
-"Bb7"e4
-"A7"refg
-"Dm7"a3d
-"B7"c+3d
-"Em7-5"e4
-"A7"rdef:|
-
-[C](2)"Dm7"hehd3
-"G7"hcb-2d
-"Bb7"e4
-"Bb7"refg
-"Dm7"a2"B7"d2
-"Bb7"f2"A7"e2
-"Dm7"d4
-"Dm7"r4`;
-
-        this.markupInput.value = sample;
-        this.parseAndRender();
-    }
-
-    async showHelpModal() {
-        const modal = document.getElementById('helpModal');
-        const contentDiv = document.getElementById('helpContent');
-
-        modal.classList.remove('hidden');
-
-        if (this.helpLoaded) return;
-
-        // Embedding help content directly to support file:// protocol usage
-        const helpMarkdown = `## 1. メタデータ
-- \`title: 曲名\` : タイトルを設定します。
-- \`key: Dm\` : 曲のキーを設定します（移調に連動）。
-
-## 2. 構造・記号
-- \`[A]\` : セクションラベルを表示します。
-- \`|:\` : リピート開始
-- \`:|\` : リピート終了
-- \`|\` : 複縦線（行の末尾にある場合）
-- \`(1)\`, \`(2)\` : 1番カッコ、2番カッコ
-
-## 3. コードネーム
-- \`"Cm7"\` : コード名はダブルクォーテーションで囲みます。
-- \`"A(-9,-13)"\` : テンションはカッコ内に記述します。
-
-## 4. 音符と休符
-- **音高**: \`c\`, \`d\`, \`e\`, \`f\`, \`g\`, \`a\`, \`b\`
-- **オクターブ**:
-  - \`llc\` : 非常に低い (Oct 2)
-  - \`lc\` : 低い (Oct 3)
-  - \`c\` : 普通 (Oct 4)
-  - \`hc\` : 高い (Oct 5)
-  - \`hhc\` : 非常に高い (Oct 6)
-  - ※ オクターブの切り替わり基準は \`c\` です。
-- **臨時記号**: \`+\` (シャープ), \`-\` (フラット)
-- **休符**: \`r\`
-- **音価**: \`c4\`, \`c2\`, \`c1\`, \`c0.5\`, \`c1/3\` (三連符)
-  - 音名と数字の間にスペースは不要です。音価を省略すると四分音符となります。
-
-## 5. レイアウト
-- \`nl\` : 次の小節から改行します。
-- \`,\` : 小節内の区切り（任意）。`;
-
-        try {
-            contentDiv.innerHTML = marked.parse(helpMarkdown);
-            this.helpLoaded = true;
-        } catch (error) {
-            console.error(error);
-            contentDiv.innerHTML = `<p style="color:red">Error parsing help: ${error.message}</p>`;
-        }
-    }
-
-    showAIComposerDialog() {
-        const modal = document.getElementById('aiModal');
-        const styleBtns = modal.querySelectorAll('.style-btn');
-        const customInput = document.getElementById('customPrompt');
-        const copyBtn = document.getElementById('btnCopyPrompt');
-        const densityControl = document.getElementById('densityControl');
-        const densitySlider = document.getElementById('noteDensitySlider');
-        const densityValue = document.getElementById('noteDensityValue');
-
-        modal.classList.remove('hidden');
-
-        // Density slider label update
-        const updateDensityLabel = (val) => {
-            const labels = ['Very Low', 'Low', 'Medium', 'High', 'Very High'];
-            densityValue.textContent = labels[val - 1];
+        // Volume mixing
+        const updateVolumes = () => {
+            this.player.setVolumes(
+                parseFloat(this.el.volMelody.value),
+                parseFloat(this.el.volChords.value),
+                parseFloat(this.el.volBass.value)
+            );
         };
+        this.el.volMelody.addEventListener("input", updateVolumes);
+        this.el.volChords.addEventListener("input", updateVolumes);
+        this.el.volBass.addEventListener("input", updateVolumes);
 
-        densitySlider.oninput = (e) => updateDensityLabel(e.target.value);
-        updateDensityLabel(densitySlider.value);
-
-
-        // Reset state
-        let selectedStyle = 'standard';
-        styleBtns.forEach(btn => {
-            btn.classList.remove('selected');
-            if (btn.dataset.style === 'standard') btn.classList.add('selected');
+        // WAV Export
+        this.el.btnExportWav.addEventListener("click", () => {
+            if (!this.currentSheet) this.reparseAndRender();
+            const title = (this.currentSheet.title || "leadsheet").replace(/[^a-zA-Z0-9_-]/g, "_");
+            this.player.exportToWav(this.currentSheet, `${title}.wav`);
         });
 
-        // Style selection
-        const updateVisibility = (style) => {
-            if (style === 'bebop' || style === 'modal') {
-                densityControl.classList.add('hidden');
-            } else {
-                densityControl.classList.remove('hidden');
+        // Window resize
+        window.addEventListener("resize", () => {
+            if (this.renderer && this.currentSheet) {
+                this.renderer.render();
             }
-        };
-
-        styleBtns.forEach(btn => {
-            btn.replaceWith(btn.cloneNode(true)); // Clear old listeners
         });
-
-        const newStyleBtns = modal.querySelectorAll('.style-btn');
-        newStyleBtns.forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                newStyleBtns.forEach(b => b.classList.remove('selected'));
-                e.target.classList.add('selected');
-                selectedStyle = e.target.dataset.style;
-                updateVisibility(selectedStyle);
-            });
-        });
-
-        // Initial visibility check
-        updateVisibility(selectedStyle);
-
-        // Copy prompt button
-        copyBtn.replaceWith(copyBtn.cloneNode(true)); // Clear old listeners
-        const newCopyBtn = document.getElementById('btnCopyPrompt');
-        newCopyBtn.addEventListener('click', () => {
-            const customPrompt = modal.querySelector('#customPrompt').value.trim();
-            const selectedKey = modal.querySelector('#keySelect').value;
-            const density = parseInt(densitySlider.value);
-
-            const styleToUse = customPrompt ? 'CUSTOM:' + customPrompt : selectedStyle;
-            const prompt = this.buildGeminiPrompt(styleToUse, selectedKey, density);
-
-            navigator.clipboard.writeText(prompt).then(() => {
-                this.showToast('Prompt copied to clipboard!');
-                modal.classList.add('hidden');
-            }).catch(err => {
-                console.error('Failed to copy:', err);
-                this.showToast('Failed to copy. See console.');
-                console.log(prompt);
-            });
-        });
-
-        // Modal overlay click to close
-        modal.onclick = (e) => {
-            if (e.target === modal) modal.classList.add('hidden');
-        };
     }
 
-    // --- Forum UI Logic ---
-
-    async shareToForum() {
-        if (!this.forum) {
-            this.showToast("Firebase not initialized");
-            return;
+    toggleZenMode(forceState) {
+        const isZen = forceState !== undefined
+            ? document.body.classList.toggle("zen-mode", forceState)
+            : document.body.classList.toggle("zen-mode");
+        if (this.el.btnZenMode) {
+            this.el.btnZenMode.textContent = isZen ? "✕ Exit Zen" : "🖥️ Fullscreen";
         }
+        setTimeout(() => {
+            if (this.renderer && this.currentSheet) {
+                this.renderer.render();
+            }
+        }, 120);
+    }
 
-        const markup = this.markupInput.value;
-        if (!markup.trim()) {
-            this.showToast("Please enter some markup first");
-            return;
+    loadDefaultSong() {
+        this.player.stop();
+        this.loadFullSong(DEFAULT_ABC);
+    }
+
+    loadFullSong(fullMarkup) {
+        if (!fullMarkup) fullMarkup = "";
+        this.currentTunes = MultiTuneHelper.splitTunes(fullMarkup);
+        if (this.currentTunes.length === 0) {
+            this.currentTunes.push(new Tune(1, "", "", ""));
         }
+        this.currentTuneIndex = 0;
+        this.updateTuneTabsUI();
+        this.loadCurrentTuneToEditor();
+    }
 
-        const title = this.renderer.sheetMusic?.title || "Untitled";
-        try {
-            await this.forum.uploadSong(title, markup);
-            this.showToast("Uploaded successfully!");
-        } catch (error) {
-            console.error(error);
-            this.showToast("Upload failed: " + error.message);
+    loadCurrentTuneToEditor() {
+        if (this.currentTunes.length === 0) {
+            this.currentTunes.push(new Tune(1, "", "", ""));
+        }
+        if (this.currentTuneIndex < 0 || this.currentTuneIndex >= this.currentTunes.length) {
+            this.currentTuneIndex = 0;
+        }
+        this.isSwitchingTune = true;
+        const tune = this.currentTunes[this.currentTuneIndex];
+        this.originalAbc = tune.content || "";
+        this.el.abcInput.value = tune.content || "";
+        this.semitoneShift = 0;
+        this.updateTransposeDisplay();
+        this.reparseAndRender();
+        this.isSwitchingTune = false;
+    }
+
+    updateTuneTabsUI() {
+        if (!this.el.versionTabsContainer) return;
+        this.el.versionTabsContainer.innerHTML = "";
+
+        this.currentTunes.forEach((tune, idx) => {
+            const btn = document.createElement("button");
+            btn.className = `version-tab ${idx === this.currentTuneIndex ? "active" : ""}`;
+            const name = tune.getDisplayName(idx);
+            btn.innerHTML = `<span class="tab-badge">X:${tune.x || (idx + 1)}</span> <span>${this.escapeHtml(name)}</span>`;
+            btn.title = `Version ${tune.x || (idx + 1)}: ${name}\nClick to switch | Double-click to rename`;
+
+            btn.addEventListener("click", () => {
+                if (idx === this.currentTuneIndex) return;
+                // Save current editor content to current tune
+                if (this.currentTuneIndex >= 0 && this.currentTuneIndex < this.currentTunes.length) {
+                    this.currentTunes[this.currentTuneIndex].content = this.el.abcInput.value;
+                    MultiTuneHelper.refreshTuneMetadata(this.currentTunes[this.currentTuneIndex]);
+                }
+                this.currentTuneIndex = idx;
+                this.updateTuneTabsActiveState();
+                this.loadCurrentTuneToEditor();
+            });
+
+            btn.addEventListener("dblclick", (e) => {
+                e.stopPropagation();
+                this.renameVersionDialog(idx);
+            });
+
+            this.el.versionTabsContainer.appendChild(btn);
+        });
+    }
+
+    updateTuneTabsActiveState() {
+        if (!this.el.versionTabsContainer) return;
+        const tabs = this.el.versionTabsContainer.querySelectorAll(".version-tab");
+        tabs.forEach((tab, i) => {
+            tab.classList.toggle("active", i === this.currentTuneIndex);
+        });
+    }
+
+    updateCurrentTabTitle() {
+        if (!this.el.versionTabsContainer || this.currentTuneIndex < 0 || this.currentTuneIndex >= this.currentTunes.length) return;
+        const tabs = this.el.versionTabsContainer.querySelectorAll(".version-tab");
+        const curTab = tabs[this.currentTuneIndex];
+        if (curTab) {
+            const tune = this.currentTunes[this.currentTuneIndex];
+            const name = tune.getDisplayName(this.currentTuneIndex);
+            curTab.innerHTML = `<span class="tab-badge">X:${tune.x || (this.currentTuneIndex + 1)}</span> <span>${this.escapeHtml(name)}</span>`;
         }
     }
 
+    addNewVersionDialog() {
+        const title = prompt("New Version / Variation Name (e.g. Jazz Ballad, Swing, Solo):");
+        if (title === null) return;
+        const trimmed = title.trim() || `Ver.${this.currentTunes.length + 1}`;
+
+        // Save current editor text
+        if (this.currentTuneIndex >= 0 && this.currentTuneIndex < this.currentTunes.length) {
+            this.currentTunes[this.currentTuneIndex].content = this.el.abcInput.value;
+            MultiTuneHelper.refreshTuneMetadata(this.currentTunes[this.currentTuneIndex]);
+        }
+
+        const srcTune = this.currentTunes[this.currentTuneIndex];
+        const nextX = this.currentTunes.length + 1;
+        const newTune = MultiTuneHelper.createDuplicateTune(srcTune, trimmed, nextX);
+
+        this.currentTunes.push(newTune);
+        this.currentTuneIndex = this.currentTunes.length - 1;
+        this.updateTuneTabsUI();
+        this.loadCurrentTuneToEditor();
+        this.showToast(`Created version: ${trimmed}`);
+    }
+
+    renameVersionDialog(index) {
+        if (index < 0 || index >= this.currentTunes.length) return;
+        const tune = this.currentTunes[index];
+        const currentName = tune.getDisplayName(index);
+        const newName = prompt("Rename Version Name:", currentName);
+        if (newName === null) return;
+        const trimmed = newName.trim();
+        if (!trimmed) return;
+
+        MultiTuneHelper.updateTuneSubtitle(tune, trimmed);
+        if (index === this.currentTuneIndex) {
+            this.el.abcInput.value = tune.content;
+            this.originalAbc = tune.content;
+            this.reparseAndRender();
+        }
+        this.updateTuneTabsUI();
+        this.showToast(`Renamed to ${trimmed}`);
+    }
+
+    // Forum Functions
     async showForumModal() {
-        document.getElementById('forumModal').classList.remove('hidden');
-        this.currentForumSort = this.currentForumSort || 'likes';
-        this.loadAndRenderForum();
+        if (!this.forum) this.initForum();
+        if (this.el.forumModal) {
+            this.el.forumModal.classList.remove("hidden");
+            if (this.el.forumSearch) this.el.forumSearch.value = "";
+            await this.loadAndRenderForum();
+        }
     }
 
     async loadAndRenderForum() {
-        const loading = document.getElementById('forumLoading');
-        const listContainer = document.getElementById('forumList');
-
-        loading.classList.remove('hidden');
-        listContainer.innerHTML = '';
-
-        try {
-            this.forumSongs = await this.forum.fetchSongs(this.currentForumSort, 'desc');
-            this.renderForumList();
-        } catch (error) {
-            console.error(error);
-            listContainer.innerHTML = `<p style="color:red; padding:20px;">Error loading forum: ${error.message}</p>`;
-        } finally {
-            loading.classList.add('hidden');
-        }
-    }
-
-    renderForumList(searchQuery = '') {
-        const listContainer = document.getElementById('forumList');
-        const query = searchQuery.toLowerCase();
-
-        const filtered = this.forumSongs.filter(song =>
-            song.title.toLowerCase().includes(query) ||
-            song.author.toLowerCase().includes(query)
-        );
-
-        if (filtered.length === 0) {
-            listContainer.innerHTML = '<p style="padding:20px; text-align:center; color:#999;">No songs found</p>';
+        if (!this.forum) {
+            if (this.el.forumList) {
+                this.el.forumList.innerHTML = `<p style="padding:20px; text-align:center; color:#ef4444;">Firebase is not initialized.</p>`;
+            }
             return;
         }
 
-        listContainer.innerHTML = filtered.map(song => `
-            <div class="forum-item">
-                <div class="song-info">
-                    <h4>${song.title}</h4>
-                    <p>by ${song.author} • ${song.likes} likes • ${song.videoCount} videos</p>
+        if (this.el.forumLoading) this.el.forumLoading.classList.remove("hidden");
+        if (this.el.forumList) this.el.forumList.innerHTML = "";
+
+        try {
+            this.forumSongs = await this.forum.fetchSongs(this.currentForumSort, "desc");
+            this.renderForumList(this.el.forumSearch ? this.el.forumSearch.value : "");
+        } catch (error) {
+            console.error("Forum error:", error);
+            if (this.el.forumList) {
+                this.el.forumList.innerHTML = `<p style="padding:20px; text-align:center; color:#ef4444;">Error loading sheets: ${error.message}</p>`;
+            }
+        } finally {
+            if (this.el.forumLoading) this.el.forumLoading.classList.add("hidden");
+        }
+    }
+
+    renderForumList(searchQuery = "") {
+        if (!this.el.forumList) return;
+        const query = searchQuery.trim().toLowerCase();
+
+        const filtered = this.forumSongs.filter(s => {
+            const titleMatch = (s.title || "").toLowerCase().includes(query);
+            const authorMatch = (s.author || "").toLowerCase().includes(query);
+            return titleMatch || authorMatch;
+        });
+
+        if (filtered.length === 0) {
+            this.el.forumList.innerHTML = '<p style="padding:2rem; text-align:center; color:#94a3b8;">No lead sheets found.</p>';
+            return;
+        }
+
+        const escapeHtml = (str) => {
+            return String(str || "").replace(/[&<>"']/g, (m) => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            })[m]);
+        };
+
+        this.el.forumList.innerHTML = filtered.map(song => {
+            const isOwner = song.uuid && window.userUuid && song.uuid === window.userUuid;
+            const safeTitle = escapeHtml(song.title || "Untitled");
+            const safeAuthor = escapeHtml(song.author || "Browser User");
+            const attrTitle = (song.title || "Untitled").replace(/'/g, "\\'");
+
+            return `
+                <div class="forum-item" data-id="${song.id}">
+                    <div class="song-info">
+                        <h4>${safeTitle}</h4>
+                        <div class="song-meta">
+                            <span>by <strong>${safeAuthor}</strong></span>
+                            <span>❤️ ${song.likes || 0}</span>
+                            <span>🎥 ${song.videoCount || 0}</span>
+                        </div>
+                    </div>
+                    <div class="forum-actions">
+                        <button class="action-btn action-btn-load" onclick="window.app.loadSongFromForum('${song.id}')">📄 Load</button>
+                        <button class="action-btn action-btn-like" onclick="window.app.likeSong('${song.id}')">❤️ ${song.likes || 0}</button>
+                        <button class="action-btn" onclick="window.app.showVideos('${song.id}', '${attrTitle}')">🎥 ${song.videoCount || 0}</button>
+                        ${isOwner ? `<button class="action-btn action-btn-delete" title="Delete sheet" onclick="window.app.deleteSong('${song.id}', '${song.uuid}')">🗑️</button>` : ''}
+                    </div>
                 </div>
-                <div class="forum-actions">
-                    <button class="action-btn" onclick="app.loadSongFromForum('${song.id}')">📂 Open</button>
-                    <button class="action-btn" onclick="app.likeSong('${song.id}')">❤️ ${song.likes}</button>
-                    <button class="action-btn" onclick="app.showVideos('${song.id}', '${song.title.replace(/'/g, "\\'")}')">🎥 ${song.videoCount}</button>
-                    ${song.uuid === window.userUuid ? `<button class="action-btn" onclick="app.deleteSong('${song.id}', '${song.uuid}')">🗑️</button>` : ''}
-                </div>
-            </div>
-        `).join('');
+            `;
+        }).join("");
     }
 
     async loadSongFromForum(songId) {
         const song = this.forumSongs.find(s => s.id === songId);
-        if (song) {
-            this.markupInput.value = song.markup;
-            this.parseAndRender();
-            document.getElementById('forumModal').classList.add('hidden');
-            this.showToast(`Loaded: ${song.title}`);
+        if (!song) return;
+
+        this.player.stop();
+        this.loadFullSong(song.markup);
+
+        if (this.el.forumModal) {
+            this.el.forumModal.classList.add("hidden");
         }
+        this.showToast(`Loaded: ${song.title}`);
     }
 
     async likeSong(songId) {
+        if (!this.forum) return;
         try {
             await this.forum.likeSong(songId);
             this.showToast("Liked!");
-            this.loadAndRenderForum(); // Refresh list
+            await this.loadAndRenderForum();
         } catch (error) {
-            this.showToast(error.message);
+            this.showToast(error.message === "Already liked" ? "You already liked this!" : error.message);
         }
     }
 
-    async deleteSong(songId, uuid) {
-        if (!confirm("Delete this post from the forum?")) return;
+    async deleteSong(songId, authorUuid) {
+        if (!this.forum) return;
+        if (!confirm("Are you sure you want to delete this sheet from the forum?")) return;
         try {
-            await this.forum.deleteSong(songId, uuid);
-            this.showToast("Deleted");
-            this.loadAndRenderForum();
+            await this.forum.deleteSong(songId, authorUuid);
+            this.showToast("Sheet deleted");
+            await this.loadAndRenderForum();
         } catch (error) {
             this.showToast(error.message);
         }
     }
 
-    async showVideos(songId, title) {
-        const modal = document.getElementById('videoModal');
-        const titleEl = document.getElementById('videoModalTitle');
-        const listContainer = document.getElementById('videoList');
-        const addBtn = document.getElementById('btnAddVideo');
+    async showVideos(songId, songTitle) {
+        if (!this.forum || !this.el.videoModal) return;
 
-        titleEl.textContent = `Videos for ${title}`;
-        modal.classList.remove('hidden');
-        listContainer.innerHTML = 'Loading videos...';
+        this.el.videoModalTitle.textContent = `Videos: ${songTitle}`;
+        this.el.videoModal.classList.remove("hidden");
+        this.el.videoList.innerHTML = `<p style="color:#94a3b8; padding:10px;">Loading videos...</p>`;
 
-        addBtn.onclick = () => this.addVideoDialog(songId, title);
+        this.el.btnAddVideo.onclick = () => this.addVideoDialog(songId, songTitle);
 
         try {
             const videos = await this.forum.fetchVideos(songId);
             if (videos.length === 0) {
-                listContainer.innerHTML = '<p style="padding:10px; color:#999;">No videos added yet.</p>';
+                this.el.videoList.innerHTML = `<p style="color:#94a3b8; padding:10px; font-size:0.85rem;">No videos linked yet. Add the first YouTube video!</p>`;
             } else {
-                listContainer.innerHTML = videos.map(vid => `
+                this.el.videoList.innerHTML = videos.map(vid => `
                     <div class="video-item">
-                        <span>${vid.title}</span>
-                        <a href="${vid.youtubeUrl}" target="_blank" class="btn btn-small btn-secondary">▶ Watch</a>
+                        <span style="font-weight:600; color:var(--text-primary);">${vid.title || "Video"}</span>
+                        <a href="${vid.youtubeUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-primary">▶ Watch</a>
                     </div>
-                `).join('');
+                `).join("");
             }
         } catch (error) {
-            listContainer.innerHTML = `<p style="color:red;">Error: ${error.message}</p>`;
+            this.el.videoList.innerHTML = `<p style="color:#ef4444; padding:10px;">Error: ${error.message}</p>`;
         }
     }
 
-    addVideoDialog(songId, songTitle) {
-        const title = prompt("Video Title (e.g., My Cover):");
-        if (!title) return;
-        const url = prompt("YouTube URL:");
-        if (!url) return;
+    async addVideoDialog(songId, songTitle) {
+        const title = prompt("Video Title (e.g. Live Performance, Backing Track):");
+        if (!title || !title.trim()) return;
+        const url = prompt("YouTube Video URL:");
+        if (!url || !url.trim()) return;
 
-        this.forum.addVideo(songId, title, url)
-            .then(() => {
-                this.showToast("Video added!");
-                this.showVideos(songId, songTitle); // Refresh
-            })
-            .catch(err => this.showToast(err.message));
+        try {
+            await this.forum.addVideo(songId, title.trim(), url.trim());
+            this.showToast("Video added!");
+            await this.showVideos(songId, songTitle);
+            await this.loadAndRenderForum();
+        } catch (error) {
+            this.showToast(error.message);
+        }
+    }
+
+    showPostModal() {
+        if (this.el.postModal) {
+            this.el.postModal.classList.remove("hidden");
+            if (this.el.postTitle) {
+                this.el.postTitle.value = this.currentSheet && this.currentSheet.title ? this.currentSheet.title : "";
+                this.el.postTitle.focus();
+            }
+            if (this.el.postAuthor && !this.el.postAuthor.value) {
+                this.el.postAuthor.value = localStorage.getItem("jazz_author_name") || "";
+            }
+        }
+    }
+
+    hidePostModal() {
+        if (this.el.postModal) {
+            this.el.postModal.classList.add("hidden");
+        }
+    }
+
+    async submitPost() {
+        if (!this.forum) {
+            this.showToast("Firebase is not initialized");
+            return;
+        }
+
+        const title = this.el.postTitle ? this.el.postTitle.value.trim() : "";
+        const author = this.el.postAuthor ? this.el.postAuthor.value.trim() : "";
+        
+        // Save current editor text to current tune
+        if (this.currentTuneIndex >= 0 && this.currentTuneIndex < this.currentTunes.length) {
+            this.currentTunes[this.currentTuneIndex].content = this.el.abcInput.value;
+        }
+        const markup = (this.currentTunes.length > 1)
+            ? MultiTuneHelper.combineTunes(this.currentTunes)
+            : this.el.abcInput.value.trim();
+
+        if (!title) {
+            alert("Please enter a song title.");
+            return;
+        }
+        if (!markup) {
+            alert("The sheet markup editor is empty.");
+            return;
+        }
+
+        if (author) {
+            localStorage.setItem("jazz_author_name", author);
+        }
+
+        try {
+            this.el.btnSubmitPost.disabled = true;
+            this.el.btnSubmitPost.textContent = "Posting...";
+            await this.forum.uploadSong(title, markup, author);
+            this.hidePostModal();
+            this.showToast("Successfully posted to forum! 🎉");
+            if (this.el.forumModal && !this.el.forumModal.classList.contains("hidden")) {
+                await this.loadAndRenderForum();
+            }
+        } catch (error) {
+            console.error("Upload error:", error);
+            this.showToast("Upload failed: " + error.message);
+        } finally {
+            this.el.btnSubmitPost.disabled = false;
+            this.el.btnSubmitPost.textContent = "Post to Forum";
+        }
     }
 
     showToast(message) {
-        const toast = document.getElementById('toast');
-        toast.textContent = message;
-        toast.classList.remove('hidden');
-        setTimeout(() => toast.classList.add('hidden'), 3000);
+        if (!this.el.toast) return;
+        this.el.toast.textContent = message;
+        this.el.toast.classList.remove("hidden");
+        clearTimeout(this.toastTimer);
+        this.toastTimer = setTimeout(() => {
+            this.el.toast.classList.add("hidden");
+        }, 3000);
     }
 
-    buildGeminiPrompt(style, key, density) {
-        const styleInstruction = style.startsWith('CUSTOM:') ? style.substring(7) : this.getStyleBlock(style);
-        const densityInstruction = this.getDensityInstruction(style, density);
-
-        return `You are a jazz composition engine.
-Compose a creative, authentic jazz lead sheet in standard ABC notation.
-
-Key: ${key}
-${styleInstruction}
-${densityInstruction ? 'Density: ' + densityInstruction : ''}
-
-ABC NOTATION RULES:
-- Include tags: T: [Evocative Title], K: ${key}, M: 4/4, L: 1/8.
-- Chords in quotes before notes (e.g., "Dm7" D2 F2 "G7" B2 G2 | "Cmaj7" E4 z4 |).
-- Ensure 8 eighth notes (or equivalent) per 4/4 bar.
-- Length: 16 to 32 measures (AABA or ABAC).
-- Use syncopation, rests (z), triplets (3, and chromatic approach tones.
-- Output ONLY raw ABC notation code (no markdown \`\`\`, no explanations).`;
+    shiftKey(delta) {
+        this.semitoneShift += delta;
+        const transposed = AbcTransposer.transpose(this.originalAbc, this.semitoneShift);
+        this.el.abcInput.value = transposed;
+        this.updateTransposeDisplay();
+        this.reparseAndRender();
     }
 
-    getStyleBlock(style) {
-        switch (style) {
-            case 'bebop':
-                return `Style: BEBOP
-- Fast, dense eighth-note lines with chromatic enclosures, approach tones, and arpeggiated extensions.
-- Rapid II-V-I harmonic changes with altered dominants (b9, #9, b5, #5).`;
-            case 'hardbop':
-                return `Style: HARD BOP
-- Soulful blues vocabulary, minor pentatonic phrases, and catchy, energetic rhythm motifs.
-- Rich chord voicings with modal and bluesy color tones.`;
-            case 'contemporary':
-                return `Style: CONTEMPORARY JAZZ
-- Modern non-functional harmony, slash chords (e.g. C/D, F#m/B), wide melodic leaps, and asymmetrical rhythms.
-- Dynamic space, silence, and expressive extended harmonies.`;
-            case 'modal':
-                return `Style: MODAL JAZZ
-- Spacious, floating melodies focusing on scale degrees, 9ths, 11ths, and 13ths over long modal chord stays.
-- Minimal chromaticism; emphasis on repetition with subtle rhythmic variation.`;
-            default:
-                return `Style: JAZZ STANDARD
-- Classic swing phrasing with lyrical melody, clear II-V-I cadences, and elegant voice leading.`;
+    updateTransposeDisplay() {
+        const s = ((this.semitoneShift % 12) + 12) % 12;
+        const text = (s === 0) ? "Orig" : `${(this.semitoneShift > 0) ? "+" : ""}${this.semitoneShift}`;
+        if (this.el.transposeDisplay) this.el.transposeDisplay.textContent = text;
+        if (this.el.zenTransposeDisplay) this.el.zenTransposeDisplay.textContent = text;
+    }
+
+    extractBpm(tempoStr) {
+        if (!tempoStr) return 0;
+        const str = String(tempoStr).trim();
+        const eqMatch = str.match(/=\s*(\d+)/);
+        if (eqMatch) {
+            return parseInt(eqMatch[1], 10);
         }
+        const numMatch = str.match(/\b(\d{2,3})\b/);
+        if (numMatch) {
+            return parseInt(numMatch[1], 10);
+        }
+        const anyDigits = str.match(/\d+/g);
+        if (anyDigits && anyDigits.length > 0) {
+            return parseInt(anyDigits[anyDigits.length - 1], 10);
+        }
+        return 0;
     }
 
-    getDensityInstruction(style, density) {
-        if (style === 'bebop' || style === 'modal') return "";
-        
-        if (density <= 1) return "Very Low (mainly half and whole notes)";
-        if (density === 2) return "Low (spacious, let melody breathe)";
-        if (density === 4) return "High (active, many eighth notes)";
-        if (density >= 5) return "Very High (virtuosic, fast runs, sixteenth notes)";
-        return "Medium (balanced active lines and rests)";
+    escapeHtml(str) {
+        return String(str || "").replace(/[&<>"']/g, (m) => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        })[m]);
+    }
+
+    reparseAndRender() {
+        const abc = this.el.abcInput.value;
+        this.currentSheet = this.parser.parse(abc);
+
+        // Sync BPM with sheet Q: whenever edited (real-time trigger)
+        if (this.currentSheet && this.currentSheet.tempo) {
+            const bpm = this.extractBpm(this.currentSheet.tempo);
+            if (bpm >= 20 && bpm <= 360) {
+                this.el.bpmSlider.value = bpm;
+                this.el.bpmInput.value = bpm;
+                this.player.setBpm(bpm);
+            }
+        }
+
+        this.renderer.setSheetMusic(this.currentSheet);
+    }
+
+    bindResizerEvents() {
+        const resizer = this.el.dragResizer;
+        const editorPane = this.el.editorPane;
+        if (!resizer || !editorPane) return;
+
+        // Restore saved width from localStorage (default to 400px for generous editing room)
+        const savedWidth = localStorage.getItem("jazz_editor_width");
+        if (savedWidth) {
+            const w = parseInt(savedWidth, 10);
+            if (w >= 220 && w <= window.innerWidth - 320) {
+                editorPane.style.width = `${w}px`;
+            }
+        }
+
+        let isDragging = false;
+        let startX = 0;
+        let startW = 0;
+
+        const onMouseDown = (e) => {
+            isDragging = true;
+            startX = e.clientX;
+            startW = editorPane.getBoundingClientRect().width;
+            document.body.classList.add("resizing-active");
+            resizer.classList.add("dragging");
+            window.addEventListener("mousemove", onMouseMove);
+            window.addEventListener("mouseup", onMouseUp);
+            e.preventDefault();
+        };
+
+        const onMouseMove = (e) => {
+            if (!isDragging) return;
+            const delta = e.clientX - startX;
+            const newW = Math.max(220, Math.min(window.innerWidth - 340, startW + delta));
+            editorPane.style.width = `${newW}px`;
+            if (this.renderer && this.currentSheet) {
+                this.renderer.render();
+            }
+        };
+
+        const onMouseUp = () => {
+            if (!isDragging) return;
+            isDragging = false;
+            document.body.classList.remove("resizing-active");
+            resizer.classList.remove("dragging");
+            window.removeEventListener("mousemove", onMouseMove);
+            window.removeEventListener("mouseup", onMouseUp);
+            const finalW = Math.round(editorPane.getBoundingClientRect().width);
+            localStorage.setItem("jazz_editor_width", finalW);
+            if (this.renderer && this.currentSheet) {
+                this.renderer.render();
+            }
+        };
+
+        resizer.addEventListener("mousedown", onMouseDown);
+
+        // Touch support for tablets
+        resizer.addEventListener("touchstart", (e) => {
+            if (e.touches.length === 1) {
+                isDragging = true;
+                startX = e.touches[0].clientX;
+                startW = editorPane.getBoundingClientRect().width;
+                document.body.classList.add("resizing-active");
+                resizer.classList.add("dragging");
+            }
+        }, { passive: true });
+
+        window.addEventListener("touchmove", (e) => {
+            if (!isDragging || e.touches.length !== 1) return;
+            const delta = e.touches[0].clientX - startX;
+            const newW = Math.max(220, Math.min(window.innerWidth - 300, startW + delta));
+            editorPane.style.width = `${newW}px`;
+            if (this.renderer && this.currentSheet) {
+                this.renderer.render();
+            }
+        }, { passive: true });
+
+        window.addEventListener("touchend", () => {
+            if (isDragging) {
+                isDragging = false;
+                document.body.classList.remove("resizing-active");
+                resizer.classList.remove("dragging");
+                localStorage.setItem("jazz_editor_width", Math.round(editorPane.getBoundingClientRect().width));
+            }
+        });
     }
 }
 
-// Initialize app when DOM is loaded
-document.addEventListener('DOMContentLoaded', () => {
-    window.app = new LeadSheetApp();
+// Initialize on DOM ready
+document.addEventListener("DOMContentLoaded", () => {
+    window.app = new AppController();
 });

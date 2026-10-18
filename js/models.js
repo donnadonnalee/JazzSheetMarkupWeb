@@ -1,57 +1,10 @@
 /**
- * Music data model classes
- * Ported from MusicModel.java
+ * Music Models
+ * Direct port of MusicModel.java & SourcePosition.java
  */
 
-class Note {
-    constructor(pitch, octave, duration, isRest, accidental = '', tupletNumber = 0) {
-        this.pitch = pitch;              // 'c', 'd', 'e', etc.
-        this.octave = octave;            // 2, 3, 4, 5, 6
-        this.duration = duration;        // 0.5, 1, 2, etc.
-        this.isRest = isRest;            // boolean
-        this.accidental = accidental;    // '', '#', '-'
-        this.tupletNumber = tupletNumber; // 0 or 3, 5, 6, 7, etc.
-        this.sourcePosition = null;
-    }
-}
-
-class ChordChange {
-    constructor(chord, position) {
-        this.chord = chord;         // "Cmaj7", "Dm7", etc.
-        this.position = position;   // Position in measure (0-4)
-        this.sourcePosition = null;
-    }
-}
-
-class Measure {
-    constructor() {
-        this.notes = [];           // Array of Note objects
-        this.chords = [];          // Array of ChordChange objects
-        this.totalDuration = 0;    // Total duration (usually 4)
-        this.isNewLine = false;    // Start new line
-        this.repeatStart = false;  // |:
-        this.repeatEnd = false;    // :|
-        this.isDoubleBar = false;  // ||
-        this.voltaNumber = 0;      // 1, 2, etc. for endings
-        this.sectionLabel = '';    // 'A', 'B', 'C', etc.
-        this.sourcePosition = null;
-    }
-}
-
-class SheetMusic {
-    constructor() {
-        this.title = '';
-        this.key = 'C';            // Default key
-        this.composer = '';
-        this.tempo = '';
-        this.meter = '';
-        this.rhythm = '';
-        this.measures = [];        // Array of Measure objects
-    }
-}
-
 class SourcePosition {
-    constructor(lineNumber = -1, startOffset = -1, endOffset = -1, originalText = '') {
+    constructor(lineNumber = -1, startOffset = -1, endOffset = -1, originalText = "") {
         this.lineNumber = lineNumber;
         this.startOffset = startOffset;
         this.endOffset = endOffset;
@@ -71,7 +24,63 @@ class SourcePosition {
     }
 }
 
-// Export for use in other modules
+class Note {
+    constructor(pitch, octave, duration, isRest = false, accidental = "", tupletNumber = 0) {
+        this.pitch = pitch;
+        this.octave = octave;
+        this.duration = duration;
+        this.isRest = isRest;
+        this.accidental = accidental || "";
+        this.tupletNumber = tupletNumber || 0;
+        this.isTieStart = false;
+        this.isTieEnd = false;
+        this.tiedToNote = null;
+        this.tiedFromNote = null;
+        this.sourcePosition = new SourcePosition();
+        this.originalNote = this;
+    }
+}
+
+class ChordChange {
+    constructor(chord, position = 0) {
+        this.chord = chord;
+        this.position = position;
+        this.sourcePosition = new SourcePosition();
+        this.originalChord = this;
+    }
+}
+
+class Measure {
+    constructor() {
+        this.notes = [];
+        this.chords = [];
+        this.totalDuration = 0;
+        this.isNewLine = false;
+        this.repeatStart = false;
+        this.repeatEnd = false;
+        this.isDoubleBar = false;
+        this.voltaNumber = 0;
+        this.sectionLabel = "";
+        this.sourcePosition = new SourcePosition();
+        this.originalMeasure = this;
+    }
+}
+
+class SheetMusic {
+    constructor() {
+        this.title = "";
+        this.subTitle = "";
+        this.key = "C";
+        this.composer = "";
+        this.meter = "";
+        this.tempo = "";
+        this.rhythm = "";
+        this.unitLength = "1/8";
+        this.tags = [];
+        this.measures = [];
+    }
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { Note, ChordChange, Measure, SheetMusic, SourcePosition };
+    module.exports = { SourcePosition, Note, ChordChange, Measure, SheetMusic };
 }

@@ -13,14 +13,14 @@ class Forum {
     /**
      * Upload a song to the forum
      */
-    async uploadSong(title, markup) {
+    async uploadSong(title, markup, author) {
         if (!markup.trim()) throw new Error("Markup is empty");
 
         const songData = {
             title: title || "Untitled",
             markup: markup,
             timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-            author: "Browser User",
+            author: (author && author.trim()) ? author.trim() : "Browser User",
             versionCode: 1,
             likes: 0,
             videoCount: 0,
