@@ -197,13 +197,13 @@ class LeadSheetRenderer {
     }
 
     getMeasureMinRequiredWidth(m, keySF) {
-        if (!m) return 120;
+        if (!m) return 90;
         if (this.chordOnlyMode) {
-            const chordPad = (m.repeatStart ? 35 : 12) + (m.repeatEnd ? 35 : 8);
-            return chordPad + Math.max(1, m.chords.length) * 70;
+            const chordPad = (m.repeatStart ? 28 : 10) + (m.repeatEnd ? 24 : 6);
+            return chordPad + Math.max(1, m.chords.length) * 50;
         }
 
-        let pad = (m.repeatStart ? 55 : 35) + (m.repeatEnd ? 35 : 15);
+        let pad = (m.repeatStart ? 36 : 18) + (m.repeatEnd ? 24 : 10);
         let noteCount = 0;
         let accCount = 0;
         for (const n of m.notes) {
@@ -214,13 +214,13 @@ class LeadSheetRenderer {
         }
 
         if (noteCount === 0) {
-            const chordMin = pad + Math.max(0, m.chords.length) * 60;
-            return Math.max(chordMin, 110);
+            const chordMin = pad + Math.max(0, m.chords.length) * 44;
+            return Math.max(chordMin, 85);
         }
 
         let firstNoteAcc = false;
         if (m.notes.length > 0 && this.noteHasAccidental(m.notes[0])) {
-            pad += 18;
+            pad += 13;
             firstNoteAcc = true;
         }
 
@@ -228,12 +228,12 @@ class LeadSheetRenderer {
         if (noteCount > 1) {
             const subsequentAccCount = firstNoteAcc ? Math.max(0, accCount - 1) : accCount;
             const nonAccCount = Math.max(0, (noteCount - 1) - subsequentAccCount);
-            noteSpace = (subsequentAccCount * 46) + (nonAccCount * 20);
+            noteSpace = (subsequentAccCount * 25) + (nonAccCount * 14);
         } else {
-            noteSpace = 30;
+            noteSpace = 22;
         }
 
-        const chordsMin = pad + m.chords.length * 55;
+        const chordsMin = pad + m.chords.length * 42;
         const minW = pad + noteSpace;
         return Math.max(minW, chordsMin);
     }
@@ -304,7 +304,9 @@ class LeadSheetRenderer {
                 sumMinW += this.getMeasureMinRequiredWidth(measures[k], currentKeySF);
             }
 
-            if (sumMinW <= totalLineWidth || blockSize <= 1) {
+            // Keep 4 measures on 1 line unless width is extremely narrow (< 420px)
+            const minAllowedWidthFor4 = 420;
+            if (sumMinW <= totalLineWidth || (blockSize === 4 && totalLineWidth >= minAllowedWidthFor4) || blockSize <= 1) {
                 spans.push({ start: blockStart, end: blockEnd, count: () => blockEnd - blockStart });
             } else {
                 if (blockSize === 4) {
@@ -339,9 +341,9 @@ class LeadSheetRenderer {
         const containerWidth = container ? container.clientWidth : 800;
         const containerHeight = container ? container.clientHeight : 600;
 
-        // Display width: Standard Lead Sheet Width (Real Book / A4 proportion ~860px)
-        // Keeps measures compact (~190-210px each) for optimal musical phrasing readability
-        const maxSheetWidth = 860;
+        // Display width: Standard Lead Sheet Width
+        // Allow expanding smoothly with window/container width up to 1350px for widescreen comfort
+        const maxSheetWidth = 1350;
         const displayWidth = Math.min(maxSheetWidth, Math.max(380, containerWidth - 32));
         const dpr = window.devicePixelRatio || 1;
 
@@ -375,10 +377,10 @@ class LeadSheetRenderer {
             this.chordFontSize = Math.round(Math.max(24, Math.min(50, baseStepY * 0.46 * (this.chordScale || 1.8))));
         } else {
             // Guarantee minimum natural staff height so lines and note heads never degrade into thin unrecognizable artifacts
-            const minAllowedStepY = Math.max(62, targetBaseSpacing * 5.8);
+            const minAllowedStepY = Math.max(70, targetBaseSpacing * 6.4);
             if (fitStepY >= minAllowedStepY) {
                 // Fits gracefully inside one screen
-                baseStepY = Math.min(fitStepY, 130);
+                baseStepY = Math.min(fitStepY, 135);
             } else {
                 // Maintain high readability with smooth scrolling when dense
                 baseStepY = minAllowedStepY;
@@ -395,8 +397,8 @@ class LeadSheetRenderer {
         }
 
         // Exact startY ensuring line 1 chords never collide with title
-        const chordTitleSafety = (this.chordScale || 1.0) > 1.4 ? 2.0 : 1.5;
-        const startY = Math.max(roughHeaderH, titleY + 12 + this.lineSpacing * chordTitleSafety);
+        const chordTitleSafety = (this.chordScale || 1.0) > 1.4 ? 2.6 : 2.2;
+        const startY = Math.max(roughHeaderH + 6, titleY + 16 + this.lineSpacing * chordTitleSafety);
 
         // Required display height: fits container, or expands cleanly if lines require minimum readability height
         const neededHeight = Math.ceil(startY + lineCount * baseStepY + bottomSafetyMargin);
@@ -672,9 +674,9 @@ class LeadSheetRenderer {
             ctx.restore();
         }
 
-        // Lift chord if high notes present
+        // Lift chord if high notes present (Ledger lines / high melody notes)
         let chordLift = 0;
-        const defaultChordBaseY = y - Math.max(6, this.lineSpacing * ((this.chordScale || 1.0) > 1.4 ? 0.65 : 0.45));
+        const defaultChordBaseY = y - Math.max(16, this.lineSpacing * ((this.chordScale || 1.0) > 1.4 ? 1.9 : 1.5));
         if (!this.chordOnlyMode) {
             const effRy = this.getEffectiveNoteRy();
             let minNoteY = y;
@@ -689,9 +691,11 @@ class LeadSheetRenderer {
                     if (top < minNoteY) minNoteY = top;
                 }
             }
-            const safeChordY = minNoteY - Math.max(4, this.lineSpacing * 0.35);
+            // Clearance above highest note head, stem, or ledger line
+            const safeChordY = minNoteY - Math.max(8, this.lineSpacing * 0.7);
             if (safeChordY < defaultChordBaseY) {
-                chordLift = Math.min(this.lineSpacing * 1.2, defaultChordBaseY - safeChordY);
+                // Lift chord up to 55px (allowing high notes and multiple ledger lines without collision)
+                chordLift = Math.min(55, defaultChordBaseY - safeChordY);
             }
         }
 
@@ -822,11 +826,11 @@ class LeadSheetRenderer {
             }
 
             const isPickup = this.isPickupMeasure(index);
-            let noteLeftPad = isPickup ? 16 : (measure.repeatStart && !isLineStart ? 55 : 35);
+            let noteLeftPad = isPickup ? 12 : (measure.repeatStart && !isLineStart ? 38 : 22);
             if (measure.notes.length > 0 && displayAccs[0]) {
-                noteLeftPad += 18;
+                noteLeftPad += 13;
             }
-            const noteRightPad = measure.repeatEnd ? 35 : 15;
+            const noteRightPad = measure.repeatEnd ? 24 : 10;
             const usableWidth = width - noteLeftPad - noteRightPad;
             let currentNoteX = x + noteLeftPad;
 
@@ -837,7 +841,7 @@ class LeadSheetRenderer {
                 if (n.duration <= 0) continue;
                 let w = Math.pow(Math.max(0.15, n.duration), 0.58);
                 if (k + 1 < measure.notes.length && displayAccs[k + 1]) {
-                    w += 0.55;
+                    w += 0.35;
                 }
                 noteWeights[k] = w;
                 totalWeight += w;
@@ -853,9 +857,9 @@ class LeadSheetRenderer {
                 const n = measure.notes[k];
                 if (n.duration <= 0) continue;
                 lastValidNoteIdx = k;
-                let minStep = 18;
+                let minStep = 14;
                 if (k + 1 < measure.notes.length && displayAccs[k + 1]) {
-                    minStep = Math.max(48, effRx + 40);
+                    minStep = Math.max(25, effRx + 17);
                 }
                 const step = (noteWeights[k] / totalWeight) * usableWidth;
                 idealSteps[k] = Math.max(minStep, step);
