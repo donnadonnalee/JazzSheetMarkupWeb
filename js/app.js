@@ -3,25 +3,8 @@
  * Connects LeadSheetParser, LeadSheetRenderer, and AudioPlayer.
  */
 
-// Default lead sheet: Danny Boy with 3 variations (Trad, Jazz Ballad, Jazz Swing)
+// Default lead sheet: Danny Boy (Jazz Ballad version)
 const DEFAULT_ABC = `X:1
-T: Danny Boy
-T: Trad
-G: sample, traditional, ballad, swing
-L:1/4
-Q: 1/4=116
-K: G
-"N.C" FGA |
-|:"G" B3A |"G" BedB | "CM" A G E2 |"CM" zGBc |
-"G"d3e |"Em" dBGB | "Am"A4 |"D7" z FGA |
-"G"B3 A |"G"Be dB | "CM"AG E2 |"Cm" z F G A |
-"G"B3c |"CM" BA "D7"GA |"G"G4 |"D7"z d e f |
-"G"g3 f |"C" fe de |"G"d B G2 |"G" zdef | 
-"G"g3  f |"C" fe dB | "Am"A4 |"D7"zded |
-"G" b3 a |"C" ag eg |"G"dB G2 |"C" z FGA | 
-"G"Be dB |"C"AG EF | "G"G4 |"G"z4 :|]
-
-X:2
 T: Danny Boy
 T: Jazz Ballad
 L:1/4
@@ -35,19 +18,7 @@ K: G
 "G"g3 f |"CM" fe de |"G"d B "CM" G2 | "F#m7b5"zd"B7"ef | 
 "Em"g3  f |"A7" fe dB | "Am7"A4 |"D7"zded |
 "G7" b2- "F7"ba |"C" ag "C#o"eg |"D7"dB "B7/D#"G2 |"Em" z FGA | 
-"G"Be "Em7"dB |"Am7"AG "D7" EF | "G"G2- "CM"G2 |"G"z4 :|]
-
-X:3
-T: Danny Boy
-T: Jazz Swing
-L: 1/8
-Q: 1/4=90
-K: G
-"N.C." FGA |
-|: "Gmaj7" B3A BedB | "Cmaj7" A G E2 "Cm6" zGBc | "G/B" d3e "Bbdim7" dBGB | "Am7" A4 "D7" z FGA |
-"Gmaj7" B3 A "G7/F" Be dB | "Cmaj7/E" AG E2 "Cm6/Eb" z F G A | "G/D" B3c "D7" BAGA | "G6" G4 "D7" z d e f |
-"G" g3 f "CM"fe de | "G" d B G2 "CM"zdef | "Bm7" g3 f "E7" fe dB | "Am7" A4 "D7" zded |
-"G" b3 a "CM"ag eg | "Bm7" dB G2 "Bb7" z FGA | "Am7" Be dB "Ab7" AGEF | "G6" G4 "D7" z4 :|]`;
+"G"Be "Em7"dB |"Am7"AG "D7" EF | "G"G2- "CM"G2 |"G"z4 :|]`;
 
 class AppController {
     constructor() {

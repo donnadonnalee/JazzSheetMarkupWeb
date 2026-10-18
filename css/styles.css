@@ -294,11 +294,11 @@ body:not(.dark-theme) .version-tab-bar {
     align-items: center;
     gap: 6px;
     padding: 4px 12px;
-    font-size: 0.78rem;
+    font-size: 0.8rem;
     font-weight: 600;
     color: #94a3b8;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 16px;
     cursor: pointer;
     white-space: nowrap;
@@ -306,34 +306,61 @@ body:not(.dark-theme) .version-tab-bar {
 }
 
 body:not(.dark-theme) .version-tab {
-    color: #475569;
-    background: #ffffff;
+    color: #334155;
+    background: #e2e8f0;
     border: 1px solid #cbd5e1;
 }
 
 .version-tab:hover {
     color: #ffffff;
-    background: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.14);
+    border-color: rgba(255, 255, 255, 0.25);
 }
 
 body:not(.dark-theme) .version-tab:hover {
     color: #0f172a;
-    background: #e2e8f0;
+    background: #cbd5e1;
 }
 
-.version-tab.active {
-    color: #ffffff;
-    background: var(--primary-color) !important;
-    border-color: var(--primary-color) !important;
-    box-shadow: 0 2px 8px rgba(2, 132, 199, 0.35);
+.version-tab.active,
+body:not(.dark-theme) .version-tab.active {
+    color: #ffffff !important;
+    background: #0284c7 !important;
+    border-color: #0369a1 !important;
+    box-shadow: 0 2px 10px rgba(2, 132, 199, 0.45);
 }
 
 .version-tab .tab-badge {
     font-size: 0.68rem;
-    padding: 1px 5px;
-    background: rgba(0, 0, 0, 0.25);
+    font-weight: 700;
+    padding: 2px 6px;
+    background: rgba(255, 255, 255, 0.12);
+    color: inherit;
     border-radius: 10px;
+    line-height: 1;
+}
+
+body:not(.dark-theme) .version-tab:not(.active) .tab-badge {
+    background: rgba(0, 0, 0, 0.08);
+    color: #475569;
+}
+
+.version-tab.active .tab-title-text,
+body:not(.dark-theme) .version-tab.active .tab-title-text {
+    color: #ffffff !important;
+    font-weight: 700;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.version-tab.active .tab-badge,
+body:not(.dark-theme) .version-tab.active .tab-badge {
+    background: rgba(255, 255, 255, 0.28) !important;
+    color: #ffffff !important;
+}
+
+.version-tab.active .btn-tab-close,
+body:not(.dark-theme) .version-tab.active .btn-tab-close {
+    color: #ffffff !important;
     opacity: 0.85;
 }
 

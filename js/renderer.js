@@ -1084,8 +1084,9 @@ class LeadSheetRenderer {
             ctx.font = `bold ${accFontSize}px "Inter", sans-serif`;
             ctx.fillStyle = primaryColor;
             ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
             const accX = nx - Math.max(10, effRx * 1.8);
-            const accOffY = accFontSize * 0.35;
+            const accOffY = (acc === "-") ? (-accFontSize * 0.16) : 0;
             if (acc === "-") ctx.fillText("♭", accX, ny + accOffY);
             else if (acc === "#") ctx.fillText("♯", accX, ny + accOffY);
             else if (acc === "n") ctx.fillText("♮", accX, ny + accOffY);
@@ -1469,12 +1470,20 @@ class LeadSheetRenderer {
         const startX = x + 6;
 
         ctx.save();
-        ctx.font = 'bold 22px "Inter", sans-serif';
+        const fontSize = Math.max(16, Math.min(24, Math.round(this.lineSpacing * 1.7)));
+        ctx.font = `bold ${fontSize}px "Inter", sans-serif`;
         ctx.fillStyle = this.darkMode ? "#ffffff" : "#111111";
         ctx.textAlign = "left";
+        ctx.textBaseline = "middle";
+
+        // Accidental vertical center offset:
+        // Sharp center grid aligns with font middle.
+        // Flat round belly is below font midpoint, so shift up by ~16% to center the belly on the exact staff line/space.
+        const yAdjustment = (sf > 0) ? 0 : (-fontSize * 0.16);
+
         for (let i = 0; i < count; i++) {
             const ly = y + offsets[i] * this.lineSpacing;
-            ctx.fillText(symbol, startX + i * 12.5, ly + 10);
+            ctx.fillText(symbol, startX + i * 12.5, ly + yAdjustment);
         }
         ctx.restore();
     }
