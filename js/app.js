@@ -75,6 +75,9 @@ class AppController {
         this.bindEvents();
         this.bindResizerEvents();
 
+        // Default rhythm feel: Swing
+        this.player.setRhythmFeel(AudioPlayer.RHYTHM_SWING);
+
         // Load Danny Boy with all 3 versions as default
         this.loadDefaultSong();
     }

@@ -18,7 +18,7 @@ class AudioPlayer {
         this.isLooping = false;
 
         this.bpm = 120;
-        this.rhythmFeel = AudioPlayer.RHYTHM_EVEN;
+        this.rhythmFeel = AudioPlayer.RHYTHM_SWING;
 
         this.volumeMelody = 1.0;
         this.volumeChords = 0.8;
