@@ -18,7 +18,7 @@ K: G
 "G"g3 f |"CM" fe de |"G"d B "CM" G2 | "F#m7b5"zd"B7"ef | 
 "Em"g3  f |"A7" fe dB | "Am7"A4 |"D7"zded |
 "G7" b2- "F7"ba |"C" ag "C#o"eg |"D7"dB "B7/D#"G2 |"Em" z FGA | 
-"G"Be "Em7"dB |"Am7"AG "D7" EF | "G"G2- "CM"G2 |"G"z :|]`;
+"G"Be "Em7"dB |"Am7"AG "D7" EF | "G"G2- "CM"G2 |"G"z4 |]`;
 
 class AppController {
     constructor() {
@@ -57,6 +57,23 @@ class AppController {
 
         // Load Danny Boy with all 3 versions as default
         this.loadDefaultSong();
+
+        // Ensure web fonts (especially "Caveat" for handwritten title) are fully loaded
+        // and instantly re-render canvas so the title appears in Caveat on first page load
+        if (typeof document !== 'undefined' && document.fonts) {
+            document.fonts.ready.then(() => {
+                if (this.renderer && this.currentSheet) {
+                    this.renderer.render();
+                }
+            });
+            if (document.fonts.load) {
+                document.fonts.load('600 32px "Caveat"').then(() => {
+                    if (this.renderer && this.currentSheet) {
+                        this.renderer.render();
+                    }
+                }).catch(() => {});
+            }
+        }
 
         // Auto-join room if 'room' query parameter is present in URL
         const urlParams = new URLSearchParams(window.location.search);

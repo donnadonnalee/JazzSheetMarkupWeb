@@ -364,6 +364,18 @@ class LeadSheetRenderer {
         const titleY = isDense ? 36 : (isSemiDense ? 42 : 48);
         const bottomSafetyMargin = isZenMode ? 72 : 36;
 
+        // Auto-refresh canvas as soon as Caveat font finishes downloading from Google Fonts
+        if (typeof document !== 'undefined' && document.fonts && document.fonts.check && !this._caveatLoaded) {
+            if (!document.fonts.check(`600 ${titleFontSize}px "Caveat"`)) {
+                document.fonts.load(`600 ${titleFontSize}px "Caveat"`).then(() => {
+                    this._caveatLoaded = true;
+                    this.render();
+                }).catch(() => {});
+            } else {
+                this._caveatLoaded = true;
+            }
+        }
+
         // Generous header clearance so Title, Subtitle, Composer, and Tempo/Meter
         // NEVER collide with Line 1 stacked chords, section boxes [A], or volta brackets
         const roughHeaderH = isDense ? 78 : (isSemiDense ? 88 : 100);
@@ -438,7 +450,7 @@ class LeadSheetRenderer {
         const titleX = displayWidth / 2;
         ctx.textAlign = "center";
         ctx.fillStyle = primaryColor;
-        ctx.font = `600 ${titleFontSize}px "Caveat", cursive, sans-serif`;
+        ctx.font = `600 ${titleFontSize}px "Caveat", "Segoe UI", sans-serif`;
         const titleText = this.sheetMusic.title || "Untitled Lead Sheet";
         ctx.fillText(titleText, titleX, titleY);
 
