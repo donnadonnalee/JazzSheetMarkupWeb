@@ -489,38 +489,8 @@ const MidiStyles = {
                     const measureTicks = Math.round(beatsInMeasure * ppq);
 
                     // --- Lead Melody ---
-                    const melodyM = melodySinglePass[i];
-                    if (isMelodyChorus && leadTrack && melodyM && melodyM.notes && melodyM.notes.length > 0) {
-                        let noteTickPos = currentTick;
-                        for (let j = 0; j < melodyM.notes.length; j++) {
-                            const n = melodyM.notes[j];
-                            let noteDurTicks = Math.round(n.duration * ppq);
-
-                            if (!n.isRest && !n.isTieEnd) {
-                                const midiPitch = MidiExporter.getMidiPitchFromNote(n);
-                                if (n.isTieStart) {
-                                    let scanI = i;
-                                    let scanJ = j + 1;
-                                    let inTie = true;
-                                    while (inTie && scanI < melodySinglePass.length) {
-                                        const sm = melodySinglePass[scanI];
-                                        while (scanJ < sm.notes.length) {
-                                            const nextN = sm.notes[scanJ];
-                                            if (nextN.isRest) { inTie = false; break; }
-                                            if (nextN.isTieEnd && nextN.pitch.toLowerCase() === n.pitch.toLowerCase() && nextN.octave === n.octave) {
-                                                noteDurTicks += Math.round(nextN.duration * ppq);
-                                                if (!nextN.isTieStart) { inTie = false; break; }
-                                            } else { inTie = false; break; }
-                                            scanJ++;
-                                        }
-                                        scanI++;
-                                        scanJ = 0;
-                                    }
-                                }
-                                leadTrack.addNote(0, midiPitch, noteTickPos, Math.max(1, noteDurTicks - 15), 92);
-                            }
-                            noteTickPos += Math.round(n.duration * ppq);
-                        }
+                    if (isMelodyChorus && leadTrack) {
+                        MidiExporter.addMelodyMeasure(leadTrack, melodySinglePass, i, currentTick, ppq, 92, 15);
                     }
 
                     // --- Chords Analysis ---
@@ -674,16 +644,8 @@ const MidiStyles = {
                     const measureTicks = Math.round(beatsInMeasure * ppq);
 
                     // Lead
-                    if (isMelodyChorus && leadTrack && m.notes) {
-                        let noteTickPos = currentTick;
-                        for (const n of m.notes) {
-                            const durTicks = Math.round(n.duration * ppq);
-                            if (!n.isRest && !n.isTieEnd) {
-                                const pitch = MidiExporter.getMidiPitchFromNote(n);
-                                leadTrack.addNote(0, pitch, noteTickPos, Math.max(1, durTicks - 12), 92);
-                            }
-                            noteTickPos += durTicks;
-                        }
+                    if (isMelodyChorus && leadTrack) {
+                        MidiExporter.addMelodyMeasure(leadTrack, singlePass, i, currentTick, ppq, 92, 12);
                     }
 
                     // Chords
@@ -812,38 +774,8 @@ const MidiStyles = {
                     const measureTicks = Math.round(beatsInMeasure * ppq);
 
                     // 1. Lead Melody: Full Swing Anticipation & Triplet transformation (identical to swing style)
-                    const melodyM = melodySinglePass[i];
-                    if (isMelodyChorus && leadTrack && melodyM && melodyM.notes && melodyM.notes.length > 0) {
-                        let noteTickPos = currentTick;
-                        for (let j = 0; j < melodyM.notes.length; j++) {
-                            const n = melodyM.notes[j];
-                            let noteDurTicks = Math.round(n.duration * ppq);
-
-                            if (!n.isRest && !n.isTieEnd) {
-                                const midiPitch = MidiExporter.getMidiPitchFromNote(n);
-                                if (n.isTieStart) {
-                                    let scanI = i;
-                                    let scanJ = j + 1;
-                                    let inTie = true;
-                                    while (inTie && scanI < melodySinglePass.length) {
-                                        const sm = melodySinglePass[scanI];
-                                        while (scanJ < sm.notes.length) {
-                                            const nextN = sm.notes[scanJ];
-                                            if (nextN.isRest) { inTie = false; break; }
-                                            if (nextN.isTieEnd && nextN.pitch.toLowerCase() === n.pitch.toLowerCase() && nextN.octave === n.octave) {
-                                                noteDurTicks += Math.round(nextN.duration * ppq);
-                                                if (!nextN.isTieStart) { inTie = false; break; }
-                                            } else { inTie = false; break; }
-                                            scanJ++;
-                                        }
-                                        scanI++;
-                                        scanJ = 0;
-                                    }
-                                }
-                                leadTrack.addNote(0, midiPitch, noteTickPos, Math.max(1, noteDurTicks - 12), 92);
-                            }
-                            noteTickPos += Math.round(n.duration * ppq);
-                        }
+                    if (isMelodyChorus && leadTrack) {
+                        MidiExporter.addMelodyMeasure(leadTrack, melodySinglePass, i, currentTick, ppq, 92, 12);
                     }
 
                     // 2. Accompaniment (Tacet during pickup)
@@ -1072,16 +1004,8 @@ const MidiStyles = {
                     const measureTicks = Math.round(beatsInMeasure * ppq);
 
                     // Lead (Straight 8th feel)
-                    if (isMelodyChorus && leadTrack && m.notes) {
-                        let noteTickPos = currentTick;
-                        for (const n of m.notes) {
-                            const durTicks = Math.round(n.duration * ppq);
-                            if (!n.isRest && !n.isTieEnd) {
-                                const pitch = MidiExporter.getMidiPitchFromNote(n);
-                                leadTrack.addNote(0, pitch, noteTickPos, Math.max(1, durTicks - 12), 90);
-                            }
-                            noteTickPos += durTicks;
-                        }
+                    if (isMelodyChorus && leadTrack) {
+                        MidiExporter.addMelodyMeasure(leadTrack, singlePass, i, currentTick, ppq, 90, 12);
                     }
 
                     // Accompaniment: Rests (tacet) during pickup measure!
@@ -1215,16 +1139,8 @@ const MidiStyles = {
                     const measureTicks = Math.round(beatsInMeasure * ppq);
 
                     // Lead
-                    if (isMelodyChorus && leadTrack && m.notes) {
-                        let noteTickPos = currentTick;
-                        for (const n of m.notes) {
-                            const durTicks = Math.round(n.duration * ppq);
-                            if (!n.isRest && !n.isTieEnd) {
-                                const pitch = MidiExporter.getMidiPitchFromNote(n);
-                                leadTrack.addNote(0, pitch, noteTickPos, Math.max(1, durTicks - 12), 92);
-                            }
-                            noteTickPos += durTicks;
-                        }
+                    if (isMelodyChorus && leadTrack) {
+                        MidiExporter.addMelodyMeasure(leadTrack, singlePass, i, currentTick, ppq, 92, 12);
                     }
 
                     // Accompaniment: Rests (tacet) during pickup measure!
@@ -1420,16 +1336,8 @@ const MidiStyles = {
                     const measureTicks = Math.round(beatsInMeasure * ppq);
 
                     // Lead
-                    if (isMelodyChorus && leadTrack && m.notes) {
-                        let noteTickPos = currentTick;
-                        for (const n of m.notes) {
-                            const durTicks = Math.round(n.duration * ppq);
-                            if (!n.isRest && !n.isTieEnd) {
-                                const pitch = MidiExporter.getMidiPitchFromNote(n);
-                                leadTrack.addNote(0, pitch, noteTickPos, Math.max(1, durTicks - 10), 95);
-                            }
-                            noteTickPos += durTicks;
-                        }
+                    if (isMelodyChorus && leadTrack) {
+                        MidiExporter.addMelodyMeasure(leadTrack, singlePass, i, currentTick, ppq, 95, 10);
                     }
 
                     // Chords
@@ -1547,16 +1455,8 @@ const MidiStyles = {
                     const measureTicks = Math.round(beatsInMeasure * ppq);
 
                     // 1. Lead Melody: Lyrical and sustained
-                    if (isMelodyChorus && leadTrack && m.notes) {
-                        let noteTickPos = currentTick;
-                        for (const n of m.notes) {
-                            const durTicks = Math.round(n.duration * ppq);
-                            if (!n.isRest && !n.isTieEnd) {
-                                const pitch = MidiExporter.getMidiPitchFromNote(n);
-                                leadTrack.addNote(0, pitch, noteTickPos, Math.max(1, durTicks - 8), 92);
-                            }
-                            noteTickPos += durTicks;
-                        }
+                    if (isMelodyChorus && leadTrack) {
+                        MidiExporter.addMelodyMeasure(leadTrack, singlePass, i, currentTick, ppq, 92, 8);
                     }
 
                     // 2. Accompaniment (Tacet during pickup)
@@ -1664,28 +1564,32 @@ const MidiStyles = {
             const leadTrack = writer.addTrack(options.leadName || 'Lead Melody');
             leadTrack.setProgram(0, 0, Math.max(0, options.leadProgram));
 
+            const hasPickup = MidiExporter.isPickupMeasure(singlePass[0], meterBeats);
+            const pickupDuration = hasPickup ? (singlePass[0].totalDuration || 1.0) : 0;
+            const pickupTicks = Math.round(pickupDuration * ppq);
+
             let currentTick = 0;
             if (options.includeCountIn) {
                 // Add count-in beat clicks on woodblock
-                currentTick = MidiExporter.addCountIn(leadTrack, ppq, meterBeats, 0, 76);
+                const countInTicks = MidiExporter.addCountIn(leadTrack, ppq, meterBeats, 0, 76);
+                if (hasPickup) {
+                    currentTick = countInTicks - pickupTicks;
+                } else {
+                    currentTick = countInTicks;
+                }
             }
 
             for (let c = 0; c < choruses; c++) {
-                for (const m of singlePass) {
-                    const beatsInMeasure = MidiExporter.getMeasureBeats(m, meterBeats);
+                for (let i = 0; i < singlePass.length; i++) {
+                    const m = singlePass[i];
+                    if (c > 0 && i === 0 && hasPickup) {
+                        continue;
+                    }
+                    const isThisPickup = (c === 0 && i === 0 && hasPickup);
+                    const beatsInMeasure = MidiExporter.getMeasureBeats(m, meterBeats, isThisPickup, pickupDuration);
                     const measureTicks = Math.round(beatsInMeasure * ppq);
 
-                    if (m.notes) {
-                        let noteTickPos = currentTick;
-                        for (const n of m.notes) {
-                            const durTicks = Math.round(n.duration * ppq);
-                            if (!n.isRest && !n.isTieEnd) {
-                                const pitch = MidiExporter.getMidiPitchFromNote(n);
-                                leadTrack.addNote(0, pitch, noteTickPos, Math.max(1, durTicks - 15), 95);
-                            }
-                            noteTickPos += durTicks;
-                        }
-                    }
+                    MidiExporter.addMelodyMeasure(leadTrack, singlePass, i, currentTick, ppq, 95, 15);
                     currentTick += measureTicks;
                 }
             }
@@ -1709,6 +1613,63 @@ class MidiExporter {
         { program: 73, name: 'Flute (GM 73)' },
         { program: -1, name: '🔇 Mute Lead (Minus-One / Rhythm Section Only)' }
     ];
+
+    /**
+     * Adds melody notes for a single measure to leadTrack, correctly sustaining tied notes across notes & measures.
+     */
+    static addMelodyMeasure(leadTrack, sequence, measureIdx, currentTick, ppq, velocity = 92, gateReductionTicks = 12) {
+        if (!leadTrack || !sequence || measureIdx < 0 || measureIdx >= sequence.length) return;
+        const m = sequence[measureIdx];
+        if (!m || !m.notes || m.notes.length === 0) return;
+
+        let noteTickPos = currentTick;
+        for (let j = 0; j < m.notes.length; j++) {
+            const n = m.notes[j];
+            const baseDurTicks = Math.round(n.duration * ppq);
+
+            if (!n.isRest && !n.isTieEnd) {
+                const midiPitch = MidiExporter.getMidiPitchFromNote(n);
+                let totalDurTicks = baseDurTicks;
+
+                if (n.isTieStart) {
+                    let inTie = true;
+                    let scanM = measureIdx;
+                    let scanN = j + 1;
+
+                    while (inTie && scanM < sequence.length) {
+                        const sm = sequence[scanM];
+                        if (sm && sm.notes) {
+                            while (scanN < sm.notes.length) {
+                                const nextN = sm.notes[scanN];
+                                if (nextN.isRest) {
+                                    inTie = false;
+                                    break;
+                                }
+                                const nextPitch = MidiExporter.getMidiPitchFromNote(nextN);
+                                if (nextN.isTieEnd && nextPitch === midiPitch) {
+                                    totalDurTicks += Math.round(nextN.duration * ppq);
+                                    if (!nextN.isTieStart) {
+                                        inTie = false;
+                                        break;
+                                    }
+                                } else {
+                                    inTie = false;
+                                    break;
+                                }
+                                scanN++;
+                            }
+                        }
+                        scanM++;
+                        scanN = 0;
+                    }
+                }
+
+                leadTrack.addNote(0, midiPitch, noteTickPos, Math.max(1, totalDurTicks - gateReductionTicks), velocity);
+            }
+
+            noteTickPos += baseDurTicks;
+        }
+    }
 
     static getTimeSignature(sheet) {
         if (!sheet) return { num: 4, den: 4 };
