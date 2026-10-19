@@ -354,14 +354,19 @@ class LeadSheetRenderer {
         const lineSpans = this.computeLineSpans(measures, availableWidth, currentKeySF);
         const lineCount = Math.max(1, lineSpans.length);
 
-        // Header and margins
+        // Header and margins: Generous top margin and prominent Real Book style title
         const isZenMode = typeof document !== 'undefined' && document.body && document.body.classList.contains("zen-mode");
-        const isDense = lineCount >= 8;
-        const isSemiDense = lineCount >= 5 && lineCount < 8;
-        const titleY = isDense ? 18 : (isSemiDense ? 22 : 28);
-        const titleFontSize = isDense ? 18 : (isSemiDense ? 22 : 26);
-        const bottomSafetyMargin = isZenMode ? 72 : (isDense ? 16 : 24);
-        const roughHeaderH = isDense ? 40 : (isSemiDense ? 48 : 58);
+        const isDense = lineCount >= 9;
+        const isSemiDense = lineCount >= 6 && lineCount < 9;
+
+        // Elegant, prominent Real Book title font size and vertical position
+        const titleFontSize = isDense ? 25 : (isSemiDense ? 29 : 34);
+        const titleY = isDense ? 36 : (isSemiDense ? 42 : 48);
+        const bottomSafetyMargin = isZenMode ? 72 : 36;
+
+        // Generous header clearance so Title, Subtitle, Composer, and Tempo/Meter
+        // NEVER collide with Line 1 stacked chords, section boxes [A], or volta brackets
+        const roughHeaderH = isDense ? 78 : (isSemiDense ? 88 : 100);
 
         const availableH = Math.max(120, containerHeight - roughHeaderH - bottomSafetyMargin);
         const fitStepY = lineCount > 1 ? (availableH / (lineCount - 0.1)) : availableH;
@@ -396,9 +401,9 @@ class LeadSheetRenderer {
             this.chordFontSize = Math.round(Math.max(13, Math.min(maxChordLimit, this.lineSpacing * 1.62 * (this.chordScale || 1.0))));
         }
 
-        // Exact startY ensuring line 1 chords never collide with title
-        const chordTitleSafety = (this.chordScale || 1.0) > 1.4 ? 2.6 : 2.2;
-        const startY = Math.max(roughHeaderH + 6, titleY + 16 + this.lineSpacing * chordTitleSafety);
+        // Exact startY ensuring line 1 chords, section labels, and brackets never collide with title
+        const chordTitleSafety = (this.chordScale || 1.0) > 1.4 ? 3.0 : 2.5;
+        const startY = Math.max(roughHeaderH, titleY + (titleFontSize * 0.5) + this.lineSpacing * chordTitleSafety + 14);
 
         // Required display height: fits container, or expands cleanly if lines require minimum readability height
         const neededHeight = Math.ceil(startY + lineCount * baseStepY + bottomSafetyMargin);
@@ -472,10 +477,10 @@ class LeadSheetRenderer {
         }
 
         ctx.textAlign = "left";
-        ctx.font = `600 ${isDense ? 11 : 12}px "Inter", sans-serif`;
+        ctx.font = `600 ${isDense ? 12 : 13}px "Inter", sans-serif`;
         ctx.fillStyle = primaryColor;
         let currentMetaX = this.MARGIN;
-        const metaY = isDense ? 16 : 22;
+        const metaY = titleY - 6;
 
         if (this.isBassClef) {
             metaText = metaText ? "[Bass Clef]  " + metaText : "[Bass Clef]";
@@ -488,14 +493,14 @@ class LeadSheetRenderer {
         const topRightX = displayWidth - this.MARGIN;
         ctx.textAlign = "right";
         if (this.sheetMusic.subTitle) {
-            ctx.font = `bold ${isDense ? 11 : 12}px "Inter", sans-serif`;
+            ctx.font = `bold ${isDense ? 12 : 13}px "Inter", sans-serif`;
             ctx.fillStyle = this.darkMode ? "#b0bec5" : "#455a64";
-            ctx.fillText(this.sheetMusic.subTitle, topRightX, isDense ? 14 : 18);
+            ctx.fillText(this.sheetMusic.subTitle, topRightX, titleY - 14);
         }
         if (this.sheetMusic.composer) {
-            ctx.font = `600 ${isDense ? 11 : 12}px "Inter", sans-serif`;
+            ctx.font = `600 ${isDense ? 12 : 13}px "Inter", sans-serif`;
             ctx.fillStyle = primaryColor;
-            const compY = this.sheetMusic.subTitle ? (isDense ? 26 : 32) : (isDense ? 16 : 22);
+            const compY = this.sheetMusic.subTitle ? (titleY + 6) : (titleY - 6);
             ctx.fillText(this.sheetMusic.composer, topRightX, compY);
         }
 
