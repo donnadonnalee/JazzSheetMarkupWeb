@@ -722,6 +722,273 @@ const MidiStyles = {
     },
 
     // ----------------------------------------------------
+    // STYLE 3: Swing (2-Beat & 4-Beat Switch)
+    // ----------------------------------------------------
+    'swing-24': {
+        id: 'swing-24',
+        name: 'Swing (2-Beat & 4-Beat Switch)',
+        description: 'テーマAは2ビート＆ハイハット、サビBとソロ中はウォーキングベース＆ライド4ビートに自動切替',
+        defaultBpm: 140,
+        generate(sheet, options, writer) {
+            const ppq = writer.ppq;
+            const singlePassSequence = options.unrollRepeats ? MidiExporter.unrollRepeats(sheet.measures) : sheet.measures;
+            if (singlePassSequence.length === 0) return;
+
+            const choruses = options.choruses || 1;
+            const soloMiddle = options.soloMiddleChoruses && choruses > 1;
+
+            // Apply preview-identical Jazz transformation (Swing + Anticipation) to melody
+            let melodySinglePass = singlePassSequence;
+            try {
+                if (typeof AudioPlayer !== 'undefined') {
+                    const ap = options.player || new AudioPlayer();
+                    melodySinglePass = ap.applyJazzTransform(singlePassSequence);
+                }
+            } catch (e) {
+                melodySinglePass = singlePassSequence;
+            }
+
+            const conductor = writer.addTrack('Tempo Track');
+            conductor.setTempo(0, options.bpm || 140);
+            conductor.setTimeSignature(0, 4, 4);
+
+            let leadTrack = null;
+            if (options.leadProgram !== undefined && options.leadProgram >= 0) {
+                leadTrack = writer.addTrack(options.leadName || 'Lead Melody');
+                leadTrack.setProgram(0, 0, options.leadProgram);
+            }
+
+            const pianoTrack = writer.addTrack('Acoustic Piano');
+            pianoTrack.setProgram(0, 1, 0);
+
+            const bassTrack = writer.addTrack('Acoustic Bass');
+            bassTrack.setProgram(0, 2, 32);
+
+            let drumTrack = null;
+            if (options.includeDrums) {
+                drumTrack = writer.addTrack('Jazz Drums');
+            }
+
+            const meterBeats = MidiExporter.getMeterBeats(sheet);
+            const hasPickup = MidiExporter.isPickupMeasure(singlePassSequence[0], meterBeats);
+            const pickupDuration = hasPickup ? (singlePassSequence[0].totalDuration || 1.0) : 0;
+            const pickupTicks = Math.round(pickupDuration * ppq);
+
+            let currentTick = 0;
+            if (options.includeCountIn) {
+                const countInTicks = MidiExporter.addCountIn(drumTrack, ppq, meterBeats);
+                if (hasPickup) {
+                    currentTick = countInTicks - pickupTicks;
+                } else {
+                    currentTick = countInTicks;
+                }
+            }
+
+            let lastBassPitch = 40;
+
+            const hasExplicitSectionLabels = singlePassSequence.some(sm => sm.sectionLabel);
+
+            for (let c = 0; c < choruses; c++) {
+                const isMelodyChorus = !soloMiddle || (c === 0 || c === choruses - 1);
+                const isSoloChorus = soloMiddle && (c > 0 && c < choruses - 1);
+
+                let currentSection = 'A';
+                let nominalMeasureCount = 0;
+
+                for (let i = 0; i < singlePassSequence.length; i++) {
+                    const m = singlePassSequence[i];
+                    if (c > 0 && i === 0 && hasPickup) {
+                        continue;
+                    }
+
+                    const isThisPickup = (c === 0 && i === 0 && hasPickup);
+                    if (!isThisPickup && m.sectionLabel) {
+                        currentSection = m.sectionLabel.trim().toUpperCase();
+                    }
+
+                    const nextM = i + 1 < singlePassSequence.length ? singlePassSequence[i + 1] : singlePassSequence[0];
+                    const beatsInMeasure = isThisPickup ? pickupDuration :
+                                           ((m.totalDuration && m.totalDuration >= 2.5 && m.totalDuration <= 3.5) ? 3 :
+                                           (m.totalDuration && m.totalDuration >= 3.5) ? Math.round(m.totalDuration) : meterBeats);
+                    const measureTicks = Math.round(beatsInMeasure * ppq);
+
+                    // 1. Lead Melody: Full Swing Anticipation & Triplet transformation (identical to swing style)
+                    const melodyM = melodySinglePass[i];
+                    if (isMelodyChorus && leadTrack && melodyM && melodyM.notes && melodyM.notes.length > 0) {
+                        let noteTickPos = currentTick;
+                        for (let j = 0; j < melodyM.notes.length; j++) {
+                            const n = melodyM.notes[j];
+                            let noteDurTicks = Math.round(n.duration * ppq);
+
+                            if (!n.isRest && !n.isTieEnd) {
+                                const midiPitch = MidiExporter.getMidiPitchFromNote(n);
+                                if (n.isTieStart) {
+                                    let scanI = i;
+                                    let scanJ = j + 1;
+                                    let inTie = true;
+                                    while (inTie && scanI < melodySinglePass.length) {
+                                        const sm = melodySinglePass[scanI];
+                                        while (scanJ < sm.notes.length) {
+                                            const nextN = sm.notes[scanJ];
+                                            if (nextN.isRest) { inTie = false; break; }
+                                            if (nextN.isTieEnd && nextN.pitch.toLowerCase() === n.pitch.toLowerCase() && nextN.octave === n.octave) {
+                                                noteDurTicks += Math.round(nextN.duration * ppq);
+                                                if (!nextN.isTieStart) { inTie = false; break; }
+                                            } else { inTie = false; break; }
+                                            scanJ++;
+                                        }
+                                        scanI++;
+                                        scanJ = 0;
+                                    }
+                                }
+                                leadTrack.addNote(0, midiPitch, noteTickPos, Math.max(1, noteDurTicks - 12), 92);
+                            }
+                            noteTickPos += Math.round(n.duration * ppq);
+                        }
+                    }
+
+                    // 2. Accompaniment (Tacet during pickup)
+                    if (!isThisPickup) {
+                        // Section 2-Feel vs 4-Feel check:
+                        // Rule: "Aセクションじゃなかったら4にする（B, C, D, Bridgeなど全て4ビート）"
+                        let is4Beat = false;
+                        if (isSoloChorus) {
+                            is4Beat = true; // Solos are always 100% 4-beat driving swing!
+                        } else if (hasExplicitSectionLabels) {
+                            const isASection = currentSection.startsWith('A') || currentSection.includes('INTRO') || currentSection.includes('VERSE');
+                            is4Beat = !isASection; // Anything not A (B, C, D, Chorus, Bridge, etc.) is 4-beat!
+                        } else {
+                            // Fallback by measure position if no section labels exist in sheet:
+                            const totalNominal = hasPickup ? (singlePassSequence.length - 1) : singlePassSequence.length;
+                            if (totalNominal >= 28 && totalNominal <= 36) {
+                                // 32-bar form: measures 17-24 (bridge) and 29-32 (shout ending) are 4-beat
+                                if (nominalMeasureCount >= 16 && nominalMeasureCount < 24) is4Beat = true;
+                                else if (nominalMeasureCount >= 28) is4Beat = true;
+                                else is4Beat = false;
+                            } else {
+                                is4Beat = (nominalMeasureCount >= Math.floor(totalNominal / 2));
+                            }
+                        }
+
+                        // Parse Chords
+                        let parsedChords = [];
+                        if (m.chords && m.chords.length > 0) {
+                            parsedChords = m.chords.map(c => ({ chord: MidiChordHelper.parseChord(c.chord) }));
+                        } else {
+                            parsedChords = [{ chord: MidiChordHelper.parseChord('C') }];
+                        }
+                        let nextChord = null;
+                        if (nextM && nextM.chords && nextM.chords.length > 0) {
+                            nextChord = MidiChordHelper.parseChord(nextM.chords[0].chord);
+                        }
+                        if (!nextChord) nextChord = parsedChords[0].chord;
+
+                        const RIDE = 51;
+                        const CLOSED_HH = 42;
+                        const HIHAT_FOOT = 44;
+                        const KICK = 36;
+                        const swingOffset = Math.round(ppq * (2 / 3));
+
+                        if (is4Beat && beatsInMeasure === 4) {
+                            // --- 4-Beat Walking Bass ---
+                            if (parsedChords.length >= 2) {
+                                const c1 = parsedChords[0].chord;
+                                const c2 = parsedChords[1].chord;
+                                const root1 = MidiChordHelper.getBassRootMidi(c1);
+                                const root2 = MidiChordHelper.getBassRootMidi(c2);
+                                const nextRoot = MidiChordHelper.getBassRootMidi(nextChord);
+
+                                bassTrack.addNote(2, root1, currentTick, Math.round(ppq * 0.92), 90);
+                                const app1 = MidiChordHelper.getApproachNote(root1, root2);
+                                bassTrack.addNote(2, app1, currentTick + ppq, Math.round(ppq * 0.92), 86);
+                                bassTrack.addNote(2, root2, currentTick + ppq * 2, Math.round(ppq * 0.92), 92);
+                                const app2 = MidiChordHelper.getApproachNote(root2, nextRoot);
+                                bassTrack.addNote(2, app2, currentTick + ppq * 3, Math.round(ppq * 0.92), 88);
+                                lastBassPitch = app2;
+                            } else {
+                                const c1 = parsedChords[0].chord;
+                                const root1 = MidiChordHelper.getBassRootMidi(c1);
+                                const nextRoot = MidiChordHelper.getBassRootMidi(nextChord);
+
+                                bassTrack.addNote(2, root1, currentTick, Math.round(ppq * 0.92), 90);
+                                const tone2 = root1 + (c1.intervals[0] || 4);
+                                bassTrack.addNote(2, tone2 <= 55 ? tone2 : tone2 - 12, currentTick + ppq, Math.round(ppq * 0.92), 86);
+                                const tone3 = root1 + (c1.intervals[1] || 7);
+                                bassTrack.addNote(2, tone3 <= 55 ? tone3 : tone3 - 12, currentTick + ppq * 2, Math.round(ppq * 0.92), 86);
+                                const app = MidiChordHelper.getApproachNote(tone3, nextRoot);
+                                bassTrack.addNote(2, app, currentTick + ppq * 3, Math.round(ppq * 0.92), 88);
+                                lastBassPitch = app;
+                            }
+
+                            // --- 4-Beat Drums (Ride Legato + Foot Hi-Hat) ---
+                            if (drumTrack) {
+                                drumTrack.addNote(9, RIDE, currentTick + ppq * 0, 100, 80);
+                                drumTrack.addNote(9, RIDE, currentTick + ppq * 1, 100, 72);
+                                drumTrack.addNote(9, RIDE, currentTick + ppq * 1 + swingOffset, 80, 86);
+                                drumTrack.addNote(9, RIDE, currentTick + ppq * 2, 100, 80);
+                                drumTrack.addNote(9, RIDE, currentTick + ppq * 3, 100, 72);
+                                drumTrack.addNote(9, RIDE, currentTick + ppq * 3 + swingOffset, 80, 86);
+
+                                drumTrack.addNote(9, HIHAT_FOOT, currentTick + ppq * 1, 60, 88);
+                                drumTrack.addNote(9, HIHAT_FOOT, currentTick + ppq * 3, 60, 90);
+                            }
+                        } else {
+                            // --- 2-Beat Bass (Beat 1: Root, Beat 3: 5th) ---
+                            const c1 = parsedChords[0].chord;
+                            const root1 = MidiChordHelper.getBassRootMidi(c1);
+                            const fifth1 = root1 + 7;
+                            if (beatsInMeasure === 4) {
+                                bassTrack.addNote(2, root1, currentTick, Math.round(ppq * 1.6), 90);
+                                bassTrack.addNote(2, fifth1 <= 55 ? fifth1 : fifth1 - 12, currentTick + ppq * 2, Math.round(ppq * 1.6), 86);
+                            } else {
+                                bassTrack.addNote(2, root1, currentTick, Math.round(ppq * 1.6), 90);
+                                bassTrack.addNote(2, fifth1 <= 55 ? fifth1 : fifth1 - 12, currentTick + ppq * 2, Math.round(ppq * 0.9), 84);
+                            }
+
+                            // --- 2-Beat Drums (Closed Hi-Hat Swing + Foot Hi-Hat + Soft Feathering Kick) ---
+                            if (drumTrack && beatsInMeasure === 4) {
+                                drumTrack.addNote(9, CLOSED_HH, currentTick + ppq * 0, 80, 72);
+                                drumTrack.addNote(9, CLOSED_HH, currentTick + ppq * 1, 80, 70);
+                                drumTrack.addNote(9, CLOSED_HH, currentTick + ppq * 1 + swingOffset, 60, 82);
+                                drumTrack.addNote(9, CLOSED_HH, currentTick + ppq * 2, 80, 72);
+                                drumTrack.addNote(9, CLOSED_HH, currentTick + ppq * 3, 80, 70);
+                                drumTrack.addNote(9, CLOSED_HH, currentTick + ppq * 3 + swingOffset, 60, 84);
+
+                                drumTrack.addNote(9, HIHAT_FOOT, currentTick + ppq * 1, 60, 86);
+                                drumTrack.addNote(9, HIHAT_FOOT, currentTick + ppq * 3, 60, 88);
+
+                                drumTrack.addNote(9, KICK, currentTick, 60, 50);
+                                drumTrack.addNote(9, KICK, currentTick + ppq * 2, 60, 48);
+                            }
+                        }
+
+                        // --- Piano Comping (Applies to both 2-Beat & 4-Beat for authentic jazz feel) ---
+                        const compingDur = Math.round(ppq * 0.28);
+                        if (beatsInMeasure === 4) {
+                            const chordForBeat2And = (parsedChords.length >= 2) ? parsedChords[1].chord : parsedChords[0].chord;
+                            const voicing1 = MidiChordHelper.getPianoVoicing(chordForBeat2And, true);
+                            const tick2And = currentTick + ppq * 1 + swingOffset;
+                            for (const pitch of voicing1) {
+                                pianoTrack.addNote(1, pitch, tick2And, compingDur, 82);
+                            }
+
+                            const voicing2 = MidiChordHelper.getPianoVoicing(nextChord, true);
+                            const tick4And = currentTick + ppq * 3 + swingOffset;
+                            for (const pitch of voicing2) {
+                                pianoTrack.addNote(1, pitch, tick4And, compingDur, 86);
+                            }
+                        }
+
+                        nominalMeasureCount++;
+                    }
+
+                    currentTick += measureTicks;
+                }
+            }
+        }
+    },
+
+    // ----------------------------------------------------
     // STYLE 3: Bossa Nova (Nylon Guitar + Clave + Tan-ta-Tan-ta Bass)
     // ----------------------------------------------------
     'bossa': {
