@@ -6,8 +6,8 @@ class SessionRoom {
     constructor(db, userUuid) {
         this.db = db;
         this.userUuid = userUuid;
-        // Use forum_songs with 'room_' doc ID prefix to match Firestore security rules
-        this.roomsCollection = db ? db.collection('forum_songs') : null;
+        // Use dedicated 'share_rooms' collection in Firestore
+        this.roomsCollection = db ? db.collection('share_rooms') : null;
 
         this.currentRoomId = null;
         this.userName = this.loadOrCreateUserName();
@@ -68,7 +68,7 @@ class SessionRoom {
     }
 
     getRoomDocRef(roomId = this.currentRoomId) {
-        return this.roomsCollection.doc('room_' + roomId);
+        return this.roomsCollection.doc(roomId);
     }
 
     async connect(roomId, initialMarkup = '') {
@@ -104,24 +104,39 @@ class SessionRoom {
         if (this.onSyncState) this.onSyncState(true);
 
         try {
-            // Check if document exists, initialize if new room
+            // Check if document exists in new 'share_rooms' collection
             const docSnap = await roomDocRef.get();
             if (!docSnap.exists) {
+                // Check if legacy data exists in 'forum_songs' (under 'room_' prefix)
+                let legacyData = null;
+                try {
+                    const legacyDocRef = this.db.collection('forum_songs').doc('room_' + cleanRoomId);
+                    const legacySnap = await legacyDocRef.get();
+                    if (legacySnap.exists) {
+                        legacyData = legacySnap.data();
+                        // Clean up legacy doc from forum_songs to keep forum pure
+                        await legacyDocRef.delete().catch(() => {});
+                    }
+                } catch (e) {
+                    // Ignore legacy read errors
+                }
+
                 await roomDocRef.set({
-                    isRoom: true,
                     roomId: cleanRoomId,
-                    markup: initialMarkup || '',
+                    markup: (legacyData && legacyData.markup) ? legacyData.markup : (initialMarkup || ''),
                     updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                    updatedBy: this.userName,
-                    creatorUuid: this.userUuid,
-                    messages: [
-                        {
-                            id: 'sys_' + Date.now(),
-                            sender: 'System',
-                            text: `Room "${cleanRoomId}" created by ${this.userName}.`,
-                            timestamp: Date.now()
-                        }
-                    ]
+                    updatedBy: (legacyData && legacyData.updatedBy) ? legacyData.updatedBy : this.userName,
+                    creatorUuid: (legacyData && legacyData.creatorUuid) ? legacyData.creatorUuid : this.userUuid,
+                    messages: (legacyData && legacyData.messages && legacyData.messages.length > 0)
+                        ? legacyData.messages
+                        : [
+                            {
+                                id: 'sys_' + Date.now(),
+                                sender: 'System',
+                                text: `Room "${cleanRoomId}" created by ${this.userName}.`,
+                                timestamp: Date.now()
+                            }
+                        ]
                 });
             }
         } catch (err) {

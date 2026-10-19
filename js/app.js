@@ -11,14 +11,14 @@ L:1/4
 Q: 1/4=116
 K: G
 "N.C" FGA |
-|:"G" B3A |"G7/F" BedB | "CM" A G E2 |"Cm" zGBc |
+|"G" B3A |"G7/F" BedB | "CM" A G E2 |"Cm" zGBc |
 "G"d2- "F#m7b5" de |"Em7" dB "A7"GB | "Am7"A4 |"D7" z FGA |
 "G"B3 A |"G7/F"Be dB | "CM"AG E2 |"Cm" z F G A |
 "G"B2- "Em" Bc |"Am7" BA "D7"GA |"G"G2- "CM"G2 |"Am7"z d "D7"e f |
 "G"g3 f |"CM" fe de |"G"d B "CM" G2 | "F#m7b5"zd"B7"ef | 
 "Em"g3  f |"A7" fe dB | "Am7"A4 |"D7"zded |
 "G7" b2- "F7"ba |"C" ag "C#o"eg |"D7"dB "B7/D#"G2 |"Em" z FGA | 
-"G"Be "Em7"dB |"Am7"AG "D7" EF | "G"G2- "CM"G2 |"G"z4 :|]`;
+"G"Be "Em7"dB |"Am7"AG "D7" EF | "G"G2- "CM"G2 |"G"z :|]`;
 
 class AppController {
     constructor() {
