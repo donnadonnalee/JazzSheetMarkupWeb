@@ -433,9 +433,10 @@ const MidiStyles = {
             }
 
             // Tracks
+            const timeSig = MidiExporter.getTimeSignature(sheet);
             const conductor = writer.addTrack('Tempo Track');
             conductor.setTempo(0, options.bpm || 120);
-            conductor.setTimeSignature(0, 4, 4);
+            conductor.setTimeSignature(0, timeSig.num, timeSig.den);
 
             let leadTrack = null;
             if (options.leadProgram !== undefined && options.leadProgram >= 0) {
@@ -484,9 +485,7 @@ const MidiStyles = {
 
                     const isThisPickup = (c === 0 && i === 0 && hasPickup);
                     const nextM = i + 1 < singlePassSequence.length ? singlePassSequence[i + 1] : singlePassSequence[0];
-                    const beatsInMeasure = isThisPickup ? pickupDuration :
-                                           ((m.totalDuration && m.totalDuration >= 2.5 && m.totalDuration <= 3.5) ? 3 :
-                                           (m.totalDuration && m.totalDuration >= 3.5) ? Math.round(m.totalDuration) : meterBeats);
+                    const beatsInMeasure = MidiExporter.getMeasureBeats(m, meterBeats, isThisPickup, pickupDuration);
                     const measureTicks = Math.round(beatsInMeasure * ppq);
 
                     // --- Lead Melody ---
@@ -638,9 +637,11 @@ const MidiStyles = {
             const choruses = options.choruses || 1;
             const soloMiddle = options.soloMiddleChoruses && choruses > 1;
 
+            const timeSig = MidiExporter.getTimeSignature(sheet);
+            const meterBeats = MidiExporter.getMeterBeats(sheet);
             const conductor = writer.addTrack('Tempo Track');
             conductor.setTempo(0, options.bpm || 120);
-            conductor.setTimeSignature(0, 4, 4);
+            conductor.setTimeSignature(0, timeSig.num, timeSig.den);
 
             let leadTrack = null;
             if (options.leadProgram !== undefined && options.leadProgram >= 0) {
@@ -661,7 +662,7 @@ const MidiStyles = {
 
             let currentTick = 0;
             if (options.includeCountIn) {
-                currentTick = MidiExporter.addCountIn(drumTrack, ppq, 4);
+                currentTick = MidiExporter.addCountIn(drumTrack, ppq, meterBeats);
             }
 
             for (let c = 0; c < choruses; c++) {
@@ -669,8 +670,7 @@ const MidiStyles = {
 
                 for (let i = 0; i < singlePass.length; i++) {
                     const m = singlePass[i];
-                    const beatsInMeasure = (m.totalDuration && m.totalDuration >= 2.5 && m.totalDuration <= 3.5) ? 3 :
-                                           (m.totalDuration && m.totalDuration >= 3.5) ? Math.round(m.totalDuration) : 4;
+                    const beatsInMeasure = MidiExporter.getMeasureBeats(m, meterBeats);
                     const measureTicks = Math.round(beatsInMeasure * ppq);
 
                     // Lead
@@ -748,9 +748,10 @@ const MidiStyles = {
                 melodySinglePass = singlePassSequence;
             }
 
+            const timeSig = MidiExporter.getTimeSignature(sheet);
             const conductor = writer.addTrack('Tempo Track');
             conductor.setTempo(0, options.bpm || 140);
-            conductor.setTimeSignature(0, 4, 4);
+            conductor.setTimeSignature(0, timeSig.num, timeSig.den);
 
             let leadTrack = null;
             if (options.leadProgram !== undefined && options.leadProgram >= 0) {
@@ -807,9 +808,7 @@ const MidiStyles = {
                     }
 
                     const nextM = i + 1 < singlePassSequence.length ? singlePassSequence[i + 1] : singlePassSequence[0];
-                    const beatsInMeasure = isThisPickup ? pickupDuration :
-                                           ((m.totalDuration && m.totalDuration >= 2.5 && m.totalDuration <= 3.5) ? 3 :
-                                           (m.totalDuration && m.totalDuration >= 3.5) ? Math.round(m.totalDuration) : meterBeats);
+                    const beatsInMeasure = MidiExporter.getMeasureBeats(m, meterBeats, isThisPickup, pickupDuration);
                     const measureTicks = Math.round(beatsInMeasure * ppq);
 
                     // 1. Lead Melody: Full Swing Anticipation & Triplet transformation (identical to swing style)
@@ -1004,9 +1003,10 @@ const MidiStyles = {
             const choruses = options.choruses || 1;
             const soloMiddle = options.soloMiddleChoruses && choruses > 1;
 
+            const timeSig = MidiExporter.getTimeSignature(sheet);
             const conductor = writer.addTrack('Tempo Track');
             conductor.setTempo(0, options.bpm || 130);
-            conductor.setTimeSignature(0, 4, 4);
+            conductor.setTimeSignature(0, timeSig.num, timeSig.den);
 
             let leadTrack = null;
             if (options.leadProgram !== undefined && options.leadProgram >= 0) {
@@ -1068,9 +1068,7 @@ const MidiStyles = {
                     }
 
                     const isThisPickup = (c === 0 && i === 0 && hasPickup);
-                    const beatsInMeasure = isThisPickup ? pickupDuration :
-                                           ((m.totalDuration && m.totalDuration >= 2.5 && m.totalDuration <= 3.5) ? 3 :
-                                           (m.totalDuration && m.totalDuration >= 3.5) ? Math.round(m.totalDuration) : meterBeats);
+                    const beatsInMeasure = MidiExporter.getMeasureBeats(m, meterBeats, isThisPickup, pickupDuration);
                     const measureTicks = Math.round(beatsInMeasure * ppq);
 
                     // Lead (Straight 8th feel)
@@ -1163,9 +1161,10 @@ const MidiStyles = {
             const choruses = options.choruses || 1;
             const soloMiddle = options.soloMiddleChoruses && choruses > 1;
 
+            const timeSig = MidiExporter.getTimeSignature(sheet);
             const conductor = writer.addTrack('Tempo Track');
             conductor.setTempo(0, options.bpm || 125);
-            conductor.setTimeSignature(0, 4, 4);
+            conductor.setTimeSignature(0, timeSig.num, timeSig.den);
 
             let leadTrack = null;
             if (options.leadProgram !== undefined && options.leadProgram >= 0) {
@@ -1212,9 +1211,7 @@ const MidiStyles = {
 
                     const isThisPickup = (c === 0 && i === 0 && hasPickup);
                     const nextM = i + 1 < singlePass.length ? singlePass[i + 1] : singlePass[0];
-                    const beatsInMeasure = isThisPickup ? pickupDuration :
-                                           ((m.totalDuration && m.totalDuration >= 2.5 && m.totalDuration <= 3.5) ? 3 :
-                                           (m.totalDuration && m.totalDuration >= 3.5) ? Math.round(m.totalDuration) : meterBeats);
+                    const beatsInMeasure = MidiExporter.getMeasureBeats(m, meterBeats, isThisPickup, pickupDuration);
                     const measureTicks = Math.round(beatsInMeasure * ppq);
 
                     // Lead
@@ -1385,9 +1382,11 @@ const MidiStyles = {
             const choruses = options.choruses || 1;
             const soloMiddle = options.soloMiddleChoruses && choruses > 1;
 
+            const timeSig = MidiExporter.getTimeSignature(sheet);
+            const meterBeats = MidiExporter.getMeterBeats(sheet);
             const conductor = writer.addTrack('Tempo Track');
             conductor.setTempo(0, options.bpm || 210);
-            conductor.setTimeSignature(0, 4, 4);
+            conductor.setTimeSignature(0, timeSig.num, timeSig.den);
 
             let leadTrack = null;
             if (options.leadProgram !== undefined && options.leadProgram >= 0) {
@@ -1409,7 +1408,7 @@ const MidiStyles = {
 
             let currentTick = 0;
             if (options.includeCountIn) {
-                currentTick = MidiExporter.addCountIn(banjoTrack, ppq, 4, 105, 76);
+                currentTick = MidiExporter.addCountIn(banjoTrack, ppq, meterBeats, 105, 76);
             }
 
             for (let c = 0; c < choruses; c++) {
@@ -1417,8 +1416,7 @@ const MidiStyles = {
 
                 for (let i = 0; i < singlePass.length; i++) {
                     const m = singlePass[i];
-                    const beatsInMeasure = (m.totalDuration && m.totalDuration >= 2.5 && m.totalDuration <= 3.5) ? 3 :
-                                           (m.totalDuration && m.totalDuration >= 3.5) ? Math.round(m.totalDuration) : 4;
+                    const beatsInMeasure = MidiExporter.getMeasureBeats(m, meterBeats);
                     const measureTicks = Math.round(beatsInMeasure * ppq);
 
                     // Lead
@@ -1488,9 +1486,10 @@ const MidiStyles = {
             const choruses = options.choruses || 1;
             const soloMiddle = options.soloMiddleChoruses && choruses > 1;
 
+            const timeSig = MidiExporter.getTimeSignature(sheet);
             const conductor = writer.addTrack('Tempo Track');
             conductor.setTempo(0, options.bpm || 65);
-            conductor.setTimeSignature(0, 4, 4);
+            conductor.setTimeSignature(0, timeSig.num, timeSig.den);
 
             let leadTrack = null;
             if (options.leadProgram !== undefined && options.leadProgram >= 0) {
@@ -1544,9 +1543,7 @@ const MidiStyles = {
                     }
 
                     const isThisPickup = (c === 0 && i === 0 && hasPickup);
-                    const beatsInMeasure = isThisPickup ? pickupDuration :
-                                           ((m.totalDuration && m.totalDuration >= 2.5 && m.totalDuration <= 3.5) ? 3 :
-                                           (m.totalDuration && m.totalDuration >= 3.5) ? Math.round(m.totalDuration) : meterBeats);
+                    const beatsInMeasure = MidiExporter.getMeasureBeats(m, meterBeats, isThisPickup, pickupDuration);
                     const measureTicks = Math.round(beatsInMeasure * ppq);
 
                     // 1. Lead Melody: Lyrical and sustained
@@ -1658,9 +1655,11 @@ const MidiStyles = {
 
             const choruses = options.choruses || 1;
 
+            const timeSig = MidiExporter.getTimeSignature(sheet);
+            const meterBeats = MidiExporter.getMeterBeats(sheet);
             const conductor = writer.addTrack('Tempo Track');
             conductor.setTempo(0, options.bpm || 120);
-            conductor.setTimeSignature(0, 4, 4);
+            conductor.setTimeSignature(0, timeSig.num, timeSig.den);
 
             const leadTrack = writer.addTrack(options.leadName || 'Lead Melody');
             leadTrack.setProgram(0, 0, Math.max(0, options.leadProgram));
@@ -1668,13 +1667,12 @@ const MidiStyles = {
             let currentTick = 0;
             if (options.includeCountIn) {
                 // Add count-in beat clicks on woodblock
-                currentTick = MidiExporter.addCountIn(leadTrack, ppq, 4, 0, 76);
+                currentTick = MidiExporter.addCountIn(leadTrack, ppq, meterBeats, 0, 76);
             }
 
             for (let c = 0; c < choruses; c++) {
                 for (const m of singlePass) {
-                    const beatsInMeasure = (m.totalDuration && m.totalDuration >= 2.5 && m.totalDuration <= 3.5) ? 3 :
-                                           (m.totalDuration && m.totalDuration >= 3.5) ? Math.round(m.totalDuration) : 4;
+                    const beatsInMeasure = MidiExporter.getMeasureBeats(m, meterBeats);
                     const measureTicks = Math.round(beatsInMeasure * ppq);
 
                     if (m.notes) {
@@ -1712,19 +1710,126 @@ class MidiExporter {
         { program: -1, name: '🔇 Mute Lead (Minus-One / Rhythm Section Only)' }
     ];
 
+    static getTimeSignature(sheet) {
+        if (!sheet) return { num: 4, den: 4 };
+        const meterStr = sheet.meter || sheet.timeSignature;
+        if (meterStr) {
+            const clean = String(meterStr).trim();
+            if (clean === 'C') return { num: 4, den: 4 };
+            if (clean === 'C|') return { num: 2, den: 2 };
+            const parts = clean.split('/');
+            if (parts.length === 2) {
+                const num = parseInt(parts[0], 10);
+                const den = parseInt(parts[1], 10);
+                if (!isNaN(num) && !isNaN(den) && num > 0 && den > 0) {
+                    return { num, den };
+                }
+            }
+        }
+        return { num: 4, den: 4 };
+    }
+
     static getMeterBeats(sheet) {
         if (!sheet) return 4;
-        if (sheet.timeSignature) {
-            const parts = sheet.timeSignature.split('/');
+        const meterStr = sheet.meter || sheet.timeSignature;
+        if (meterStr) {
+            const clean = String(meterStr).trim();
+            if (clean === 'C') return 4;
+            if (clean === 'C|') return 2;
+            const parts = clean.split('/');
             if (parts.length === 2) {
                 const num = parseFloat(parts[0]);
                 const den = parseFloat(parts[1]);
                 if (!isNaN(num) && !isNaN(den) && den > 0) {
+                    // Meter in terms of quarter notes (1 beat = 1 quarter note).
+                    // 4/4 -> 4. 3/4 -> 3. 9/8 -> 4.5. 7/8 -> 3.5. 5/8 -> 2.5. 6/8 -> 3.0.
                     return (num / den) * 4;
                 }
             }
         }
         return 4;
+    }
+
+    static getMeasureBeats(m, meterBeats = 4, isThisPickup = false, pickupDuration = 0) {
+        if (isThisPickup && pickupDuration > 0) {
+            return pickupDuration;
+        }
+        if (m && typeof m.totalDuration === 'number' && m.totalDuration > 0) {
+            const dur = m.totalDuration;
+            // Within epsilon of meterBeats
+            if (Math.abs(dur - meterBeats) < 0.05) {
+                return meterBeats;
+            }
+            // Within epsilon of an integer beat (e.g. 3.999 or 4.001 -> 4.0)
+            const rounded = Math.round(dur);
+            if (Math.abs(dur - rounded) < 0.05) {
+                return rounded;
+            }
+            // Within epsilon of a half beat (e.g. 4.499 or 4.501 -> 4.5)
+            const halfRounded = Math.round(dur * 2) / 2;
+            if (Math.abs(dur - halfRounded) < 0.05) {
+                return halfRounded;
+            }
+            return dur;
+        }
+        return meterBeats;
+    }
+
+    static extractBpm(tempoStr, unitNoteLength = "1/4") {
+        if (!tempoStr) return 0;
+        const str = String(tempoStr).trim();
+
+        // 1. Explicit fraction tempo, e.g. "1/8=140", "1/4=120", "3/8=80", "1/2=60"
+        const fracMatch = str.match(/(\d+)\/(\d+)\s*=\s*(\d+)/);
+        if (fracMatch) {
+            const num = parseInt(fracMatch[1], 10);
+            const den = parseInt(fracMatch[2], 10);
+            const rawBpm = parseInt(fracMatch[3], 10);
+            if (den > 0 && rawBpm > 0) {
+                // Ratio to quarter note (1/4):
+                // (num / den) / (1 / 4) = (num / den) * 4
+                // 1/8=140 -> 140 * 0.5 = 70 (quarter BPM)
+                // 1/4=120 -> 120 * 1.0 = 120
+                // 3/8=80  -> 80 * 1.5 = 120
+                const quarterRatio = (num / den) * 4;
+                return Math.round(rawBpm * quarterRatio);
+            }
+        }
+
+        // 2. Relative to L: unit or default, e.g. "= 120"
+        const eqMatch = str.match(/=\s*(\d+)/);
+        if (eqMatch) {
+            const rawBpm = parseInt(eqMatch[1], 10);
+            if (unitNoteLength) {
+                const uMatch = String(unitNoteLength).match(/(\d+)\/(\d+)/);
+                if (uMatch) {
+                    const uNum = parseInt(uMatch[1], 10);
+                    const uDen = parseInt(uMatch[2], 10);
+                    if (uDen > 0) {
+                        return Math.round(rawBpm * ((uNum / uDen) * 4));
+                    }
+                }
+            }
+            return rawBpm;
+        }
+
+        // 3. Simple number e.g. "Q: 140"
+        const numMatch = str.match(/\b(\d{2,3})\b/);
+        if (numMatch) {
+            const rawBpm = parseInt(numMatch[1], 10);
+            if (unitNoteLength) {
+                const uMatch = String(unitNoteLength).match(/(\d+)\/(\d+)/);
+                if (uMatch) {
+                    const uNum = parseInt(uMatch[1], 10);
+                    const uDen = parseInt(uMatch[2], 10);
+                    if (uDen > 0) {
+                        return Math.round(rawBpm * ((uNum / uDen) * 4));
+                    }
+                }
+            }
+            return rawBpm;
+        }
+        return 0;
     }
 
     static isPickupMeasure(measure, meterBeats = 4) {

@@ -563,7 +563,7 @@ class AppController {
             if (this.el.midiBpmInput) {
                 let defaultBpm = 0;
                 if (this.currentSheet && this.currentSheet.tempo) {
-                    defaultBpm = this.extractBpm(this.currentSheet.tempo);
+                    defaultBpm = this.extractBpm(this.currentSheet.tempo, this.currentSheet.unitLength);
                 }
                 if (!defaultBpm && this.el.bpmInput?.value) {
                     defaultBpm = parseInt(this.el.bpmInput.value, 10);
@@ -1579,20 +1579,58 @@ class AppController {
         if (this.el.zenTransposeDisplay) this.el.zenTransposeDisplay.textContent = text;
     }
 
-    extractBpm(tempoStr) {
+    extractBpm(tempoStr, unitNoteLength = "1/4") {
         if (!tempoStr) return 0;
         const str = String(tempoStr).trim();
+
+        // 1. Explicit fraction tempo, e.g. "1/8=140", "1/4=120", "3/8=80", "1/2=60"
+        const fracMatch = str.match(/(\d+)\/(\d+)\s*=\s*(\d+)/);
+        if (fracMatch) {
+            const num = parseInt(fracMatch[1], 10);
+            const den = parseInt(fracMatch[2], 10);
+            const rawBpm = parseInt(fracMatch[3], 10);
+            if (den > 0 && rawBpm > 0) {
+                // Ratio to quarter note (1/4):
+                // 1/8=140 -> 140 * 0.5 = 70 (Quarter note BPM)
+                // 1/4=120 -> 120 * 1.0 = 120
+                // 3/8=80  -> 80 * 1.5 = 120
+                const quarterRatio = (num / den) * 4;
+                return Math.round(rawBpm * quarterRatio);
+            }
+        }
+
+        // 2. Relative to L: unit or default, e.g. "= 120"
         const eqMatch = str.match(/=\s*(\d+)/);
         if (eqMatch) {
-            return parseInt(eqMatch[1], 10);
+            const rawBpm = parseInt(eqMatch[1], 10);
+            if (unitNoteLength) {
+                const uMatch = String(unitNoteLength).match(/(\d+)\/(\d+)/);
+                if (uMatch) {
+                    const uNum = parseInt(uMatch[1], 10);
+                    const uDen = parseInt(uMatch[2], 10);
+                    if (uDen > 0) {
+                        return Math.round(rawBpm * ((uNum / uDen) * 4));
+                    }
+                }
+            }
+            return rawBpm;
         }
+
+        // 3. Simple number e.g. "Q: 140"
         const numMatch = str.match(/\b(\d{2,3})\b/);
         if (numMatch) {
-            return parseInt(numMatch[1], 10);
-        }
-        const anyDigits = str.match(/\d+/g);
-        if (anyDigits && anyDigits.length > 0) {
-            return parseInt(anyDigits[anyDigits.length - 1], 10);
+            const rawBpm = parseInt(numMatch[1], 10);
+            if (unitNoteLength) {
+                const uMatch = String(unitNoteLength).match(/(\d+)\/(\d+)/);
+                if (uMatch) {
+                    const uNum = parseInt(uMatch[1], 10);
+                    const uDen = parseInt(uMatch[2], 10);
+                    if (uDen > 0) {
+                        return Math.round(rawBpm * ((uNum / uDen) * 4));
+                    }
+                }
+            }
+            return rawBpm;
         }
         return 0;
     }
@@ -1609,7 +1647,7 @@ class AppController {
 
         // Sync BPM with sheet Q: whenever edited (real-time trigger)
         if (this.currentSheet && this.currentSheet.tempo) {
-            const bpm = this.extractBpm(this.currentSheet.tempo);
+            const bpm = this.extractBpm(this.currentSheet.tempo, this.currentSheet.unitLength);
             if (bpm >= 20 && bpm <= 360) {
                 this.el.bpmSlider.value = bpm;
                 this.el.bpmInput.value = bpm;
