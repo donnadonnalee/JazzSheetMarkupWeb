@@ -1211,6 +1211,32 @@ body.zen-mode .zen-floating-bar {
     gap: 8px;
 }
 
+.modal-actions .btn-tool {
+    border: 1px solid var(--border-color, #cbd5e1);
+    color: var(--text-primary, #334155);
+    background: var(--bg-surface, #ffffff);
+    padding: 6px 14px;
+    border-radius: var(--radius-sm, 4px);
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+
+.modal-actions .btn-tool:hover {
+    background: var(--bg-hover, #f1f5f9);
+    color: var(--text-primary, #0f172a);
+}
+
+body.dark-theme .modal-actions .btn-tool {
+    color: #cbd5e1;
+    background: #25334e;
+    border-color: #3e4c68;
+}
+
+body.dark-theme .modal-actions .btn-tool:hover {
+    background: #334155;
+    color: #ffffff;
+}
+
 /* Video Modal */
 .video-modal-controls {
     padding: 0.75rem 1.25rem;

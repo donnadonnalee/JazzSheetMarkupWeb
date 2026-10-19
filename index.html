@@ -138,6 +138,7 @@
 
             <!-- Export -->
             <div class="export-actions">
+                <button id="btnExportMidi" class="btn btn-primary btn-sm" title="Export as multi-track Standard MIDI File (.mid)">🎹 MIDI</button>
                 <button id="btnExportWav" class="btn btn-accent btn-sm" title="Export as lossless WAV audio">💾 WAV</button>
             </div>
         </footer>
@@ -251,6 +252,62 @@
         </div>
     </div>
 
+    <!-- MIDI Export Modal -->
+    <div id="midiExportModal" class="modal-overlay hidden">
+        <div class="modal-card modal-card-sm">
+            <div class="modal-header">
+                <div class="modal-title-wrap">
+                    <span class="modal-icon">🎹</span>
+                    <h2>Export Standard MIDI File (.mid)</h2>
+                </div>
+                <button class="btn-close" id="btnCloseMidiModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="midiStyleSelect">Accompaniment Style:</label>
+                    <select id="midiStyleSelect" class="styled-input">
+                        <!-- Injected dynamically from MidiStyles -->
+                    </select>
+                    <p id="midiStyleDescription" class="form-note" style="margin-top: 4px; font-size: 0.8rem; color: var(--text-secondary);"></p>
+                </div>
+                <div class="form-group">
+                    <label for="midiLeadSelect">Lead Melody Instrument:</label>
+                    <select id="midiLeadSelect" class="styled-input">
+                        <!-- Injected dynamically from MidiExporter.INSTRUMENTS -->
+                    </select>
+                </div>
+                <div class="form-group" style="display: flex; gap: 12px; align-items: center;">
+                    <div style="flex: 1;">
+                        <label for="midiBpmInput">Tempo (BPM):</label>
+                        <input type="number" id="midiBpmInput" min="20" max="320" value="120" class="styled-input">
+                    </div>
+                    <div style="flex: 1;">
+                        <label for="midiChorusCount">Choruses:</label>
+                        <input type="number" id="midiChorusCount" min="1" max="10" value="1" class="styled-input">
+                    </div>
+                </div>
+                <div class="form-group" style="display: flex; flex-direction: column; gap: 8px; margin-top: 6px;">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.85rem; color: var(--text-secondary);">
+                        <input type="checkbox" id="midiIncludeCountIn" checked> Add 1-Measure Count-In (4-Beat Stick/Hi-Hat)
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.85rem; color: var(--text-secondary);">
+                        <input type="checkbox" id="midiSoloMiddleChoruses" checked> Mute Lead in Middle Choruses (Solo Section)
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.85rem; color: var(--text-secondary);">
+                        <input type="checkbox" id="midiIncludeDrums" checked> Include Drums / Percussion Track
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.85rem; color: var(--text-secondary);">
+                        <input type="checkbox" id="midiUnrollRepeats" checked> Expand Repeats & Voltas (Full Song Form)
+                    </label>
+                </div>
+                <div class="modal-actions" style="margin-top: 16px; display: flex; gap: 8px; justify-content: flex-end;">
+                    <button id="btnConfirmMidiExport" class="btn btn-primary" style="font-weight: 600;">💾 Export SMF (.mid)</button>
+                    <button id="btnCancelMidiExport" class="btn btn-tool">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast Notification -->
     <div id="toast" class="toast hidden"></div>
 
@@ -259,14 +316,15 @@
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
     <!-- Application Scripts -->
-    <script src="js/models.js?v=6"></script>
-    <script src="js/multi-tune-helper.js?v=6"></script>
-    <script src="js/parser.js?v=6"></script>
-    <script src="js/abc-converter.js?v=6"></script>
-    <script src="js/renderer.js?v=6"></script>
-    <script src="js/firebase-config.js?v=6"></script>
-    <script src="js/forum.js?v=6"></script>
-    <script src="js/audio-player.js?v=6"></script>
-    <script src="js/app.js?v=6"></script>
+    <script src="js/models.js?v=16"></script>
+    <script src="js/multi-tune-helper.js?v=16"></script>
+    <script src="js/parser.js?v=16"></script>
+    <script src="js/abc-converter.js?v=16"></script>
+    <script src="js/renderer.js?v=16"></script>
+    <script src="js/firebase-config.js?v=16"></script>
+    <script src="js/forum.js?v=16"></script>
+    <script src="js/midi-exporter.js?v=16"></script>
+    <script src="js/audio-player.js?v=16"></script>
+    <script src="js/app.js?v=16"></script>
 </body>
 </html>

@@ -47,6 +47,7 @@ class AppController {
         this.initRenderer();
         this.initPlayerCallbacks();
         this.initForum();
+        this.initMidiExport();
         this.bindEvents();
         this.bindResizerEvents();
 
@@ -101,6 +102,21 @@ class AppController {
             zenViewBalanceSelect: document.getElementById("zenViewBalanceSelect"),
             zenBtnExit: document.getElementById("zenBtnExit"),
             btnExportWav: document.getElementById("btnExportWav"),
+            btnExportMidi: document.getElementById("btnExportMidi"),
+            // MIDI Export Modal Elements
+            midiExportModal: document.getElementById("midiExportModal"),
+            btnCloseMidiModal: document.getElementById("btnCloseMidiModal"),
+            btnCancelMidiExport: document.getElementById("btnCancelMidiExport"),
+            btnConfirmMidiExport: document.getElementById("btnConfirmMidiExport"),
+            midiStyleSelect: document.getElementById("midiStyleSelect"),
+            midiStyleDescription: document.getElementById("midiStyleDescription"),
+            midiLeadSelect: document.getElementById("midiLeadSelect"),
+            midiBpmInput: document.getElementById("midiBpmInput"),
+            midiChorusCount: document.getElementById("midiChorusCount"),
+            midiIncludeCountIn: document.getElementById("midiIncludeCountIn"),
+            midiSoloMiddleChoruses: document.getElementById("midiSoloMiddleChoruses"),
+            midiIncludeDrums: document.getElementById("midiIncludeDrums"),
+            midiUnrollRepeats: document.getElementById("midiUnrollRepeats"),
             // Forum Elements
             btnForum: document.getElementById("btnForum"),
             btnShareForum: document.getElementById("btnShareForum"),
@@ -464,6 +480,123 @@ class AppController {
                 this.renderer.render();
             }
         });
+    }
+
+    initMidiExport() {
+        if (!this.el.btnExportMidi || !this.el.midiExportModal) return;
+
+        // Populate Accompaniment Styles
+        if (typeof MidiStyles !== 'undefined' && this.el.midiStyleSelect) {
+            this.el.midiStyleSelect.innerHTML = '';
+            for (const [id, style] of Object.entries(MidiStyles)) {
+                const opt = document.createElement('option');
+                opt.value = id;
+                opt.textContent = style.name;
+                this.el.midiStyleSelect.appendChild(opt);
+            }
+
+            const updateStyleDesc = () => {
+                const cur = MidiStyles[this.el.midiStyleSelect.value];
+                if (this.el.midiStyleDescription) {
+                    this.el.midiStyleDescription.textContent = cur ? cur.description : '';
+                }
+            };
+
+            this.el.midiStyleSelect.addEventListener('change', updateStyleDesc);
+            updateStyleDesc();
+        }
+
+        // Populate Lead Instruments
+        if (typeof MidiExporter !== 'undefined' && this.el.midiLeadSelect) {
+            this.el.midiLeadSelect.innerHTML = '';
+            for (const inst of MidiExporter.INSTRUMENTS) {
+                const opt = document.createElement('option');
+                opt.value = inst.program;
+                opt.textContent = inst.name;
+                if (inst.program === 66) opt.selected = true; // Default Tenor Sax
+                this.el.midiLeadSelect.appendChild(opt);
+            }
+        }
+
+        // Open Modal
+        this.el.btnExportMidi.addEventListener('click', () => {
+            if (!this.currentSheet) this.reparseAndRender();
+
+            // Set current BPM: prioritize Q: tag / tempo tag from sheet music
+            if (this.el.midiBpmInput) {
+                let defaultBpm = 0;
+                if (this.currentSheet && this.currentSheet.tempo) {
+                    defaultBpm = this.extractBpm(this.currentSheet.tempo);
+                }
+                if (!defaultBpm && this.el.bpmInput?.value) {
+                    defaultBpm = parseInt(this.el.bpmInput.value, 10);
+                }
+                if (!defaultBpm && this.player?.bpm) {
+                    defaultBpm = this.player.bpm;
+                }
+                this.el.midiBpmInput.value = defaultBpm || 120;
+            }
+
+            this.el.midiExportModal.classList.remove('hidden');
+        });
+
+        // Close Modal Handlers
+        const closeMidiModal = () => {
+            this.el.midiExportModal.classList.add('hidden');
+        };
+
+        if (this.el.btnCloseMidiModal) {
+            this.el.btnCloseMidiModal.addEventListener('click', closeMidiModal);
+        }
+        if (this.el.btnCancelMidiExport) {
+            this.el.btnCancelMidiExport.addEventListener('click', closeMidiModal);
+        }
+        this.el.midiExportModal.addEventListener('click', (e) => {
+            if (e.target === this.el.midiExportModal) closeMidiModal();
+        });
+
+        // Confirm Export
+        if (this.el.btnConfirmMidiExport) {
+            this.el.btnConfirmMidiExport.addEventListener('click', () => {
+                try {
+                    if (!this.currentSheet) this.reparseAndRender();
+                    if (!this.currentSheet || !this.currentSheet.measures || this.currentSheet.measures.length === 0) {
+                        this.showToast('⚠️ 楽譜データがありません。');
+                        return;
+                    }
+
+                    const style = this.el.midiStyleSelect.value || 'swing';
+                    const leadProgram = parseInt(this.el.midiLeadSelect.value, 10);
+                    const selectedOpt = this.el.midiLeadSelect.options[this.el.midiLeadSelect.selectedIndex];
+                    const leadName = selectedOpt ? selectedOpt.textContent.split('(')[0].trim() : 'Lead Melody';
+                    const bpm = parseInt(this.el.midiBpmInput.value, 10) || 120;
+                    const choruses = Math.max(1, Math.min(10, parseInt(this.el.midiChorusCount?.value, 10) || 1));
+                    const includeCountIn = this.el.midiIncludeCountIn ? this.el.midiIncludeCountIn.checked : true;
+                    const soloMiddleChoruses = this.el.midiSoloMiddleChoruses ? this.el.midiSoloMiddleChoruses.checked : true;
+                    const includeDrums = this.el.midiIncludeDrums ? this.el.midiIncludeDrums.checked : true;
+                    const unrollRepeats = this.el.midiUnrollRepeats ? this.el.midiUnrollRepeats.checked : true;
+
+                    MidiExporter.exportMidi(this.currentSheet, {
+                        style,
+                        leadProgram,
+                        leadName,
+                        bpm,
+                        choruses,
+                        includeCountIn,
+                        soloMiddleChoruses,
+                        includeDrums,
+                        unrollRepeats,
+                        player: this.player
+                    });
+
+                    closeMidiModal();
+                    this.showToast('🎹 Standard MIDI File (.mid) をエクスポートしました！');
+                } catch (err) {
+                    console.error('MIDI export error:', err);
+                    this.showToast('⚠️ MIDIエクスポートに失敗しました: ' + err.message);
+                }
+            });
+        }
     }
 
     toggleZenMode(forceState) {
