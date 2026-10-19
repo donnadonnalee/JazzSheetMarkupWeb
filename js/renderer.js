@@ -81,35 +81,35 @@ class LeadSheetRenderer {
             case 1: // Chord Only
                 this.chordOnlyMode = true;
                 this.baseLineSpacing = 16;
-                this.chordScale = 1.8;
+                this.chordScale = 1.85;
                 this.noteScale = 0.7;
                 break;
             case 2: // Chord Focus (Significantly larger chords for rhythm players)
                 this.chordOnlyMode = false;
-                this.baseLineSpacing = 9.2;
-                this.chordScale = 1.95;
-                this.noteScale = 0.80;
+                this.baseLineSpacing = 9.8;
+                this.chordScale = 1.80;
+                this.noteScale = 0.85;
                 break;
             case 3: // Balanced (Standard ABC / Lead Sheet)
                 this.chordOnlyMode = false;
-                this.baseLineSpacing = 11.2;
-                this.chordScale = 1.0;
+                this.baseLineSpacing = 11.5;
+                this.chordScale = 1.15;
                 this.noteScale = 1.0;
                 break;
-            case 4: // Melody Focus
+            case 4: // Melody Focus (Prominent melody with comfortably readable chords)
                 this.chordOnlyMode = false;
                 this.baseLineSpacing = 13.0;
-                this.chordScale = 0.82;
-                this.noteScale = 1.18;
+                this.chordScale = 1.12;
+                this.noteScale = 1.20;
                 break;
-            case 5: // Melody Max
+            case 5: // Melody Max (Maximum melody size while preserving clear chord readability)
                 this.chordOnlyMode = false;
-                this.baseLineSpacing = 14.8;
-                this.chordScale = 0.65;
+                this.baseLineSpacing = 14.5;
+                this.chordScale = 0.98;
                 this.noteScale = 1.35;
                 break;
         }
-        this.staffHeight = (this.baseLineSpacing || 11.2) * 4;
+        this.staffHeight = (this.baseLineSpacing || 11.5) * 4;
     }
 
     setPlaybackMeasure(measure) {
@@ -409,13 +409,14 @@ class LeadSheetRenderer {
             this.staffHeight = this.lineSpacing * 4;
             this.noteRx = Math.max(4.6, this.lineSpacing * 0.52 * (this.noteScale || 1.0));
             this.noteRy = Math.max(3.0, this.lineSpacing * 0.36 * (this.noteScale || 1.0));
-            const maxChordLimit = (this.chordScale || 1.0) >= 1.5 ? 42 : 28;
-            this.chordFontSize = Math.round(Math.max(13, Math.min(maxChordLimit, this.lineSpacing * 1.62 * (this.chordScale || 1.0))));
+            const maxChordLimit = (this.chordScale || 1.0) >= 1.5 ? 45 : 34;
+            this.chordFontSize = Math.round(Math.max(18, Math.min(maxChordLimit, this.lineSpacing * 1.62 * (this.chordScale || 1.0))));
         }
 
-        // Exact startY ensuring line 1 chords, section labels, and brackets never collide with title
-        const chordTitleSafety = (this.chordScale || 1.0) > 1.4 ? 3.0 : 2.5;
-        const startY = Math.max(roughHeaderH, titleY + (titleFontSize * 0.5) + this.lineSpacing * chordTitleSafety + 14);
+        // Exact startY ensuring line 1 chords (even with high notes & chord lift), section labels, and brackets never collide with title
+        const titleBottom = titleY + (titleFontSize * 0.55);
+        const maxLine1Clearance = this.chordOnlyMode ? 25 : (Math.max(28, this.lineSpacing * 2.2) + 38);
+        const startY = Math.max(roughHeaderH, Math.round(titleBottom + maxLine1Clearance));
 
         // Required display height: fits container, or expands cleanly if lines require minimum readability height
         const neededHeight = Math.ceil(startY + lineCount * baseStepY + bottomSafetyMargin);
@@ -809,8 +810,8 @@ class LeadSheetRenderer {
             const naturalWidth = this.measureChordWidth(ctx, parsed, baseChordSize);
             let effectiveSize = baseChordSize;
             if (naturalWidth > maxAllowedWidth && maxAllowedWidth > 20) {
-                const shrinkScale = Math.max(0.55, maxAllowedWidth / naturalWidth);
-                effectiveSize = baseChordSize * shrinkScale;
+                const shrinkScale = Math.max(0.78, maxAllowedWidth / naturalWidth);
+                effectiveSize = Math.max(16, Math.round(baseChordSize * shrinkScale));
             }
 
             const isHigh = (this.playbackHighlightedElement === cc);
@@ -1647,22 +1648,44 @@ class LeadSheetRenderer {
         const wRootLetter = ctx.measureText(rootLetter).width;
         let wRootAcc = 0;
         if (rootAcc) {
-            ctx.font = `bold ${baseSize * 0.65}px "Oswald", "Inter", sans-serif`;
+            ctx.font = `bold ${Math.round(baseSize * 0.68)}px "Oswald", "Inter", sans-serif`;
             wRootAcc = ctx.measureText(rootAcc).width + 1.0 * scaleFactor;
         }
         const wRoot = wRootLetter + wRootAcc;
 
         let wQuality = 0;
         if (pc.quality) {
-            ctx.font = `bold ${baseSize * 0.54}px "Oswald", "Inter", sans-serif`;
-            wQuality = ctx.measureText(pc.quality).width;
+            const qFontSize = Math.round(baseSize * 0.65);
+            ctx.font = `bold ${qFontSize}px "Oswald", "Inter", sans-serif`;
+            if (pc.quality.startsWith("-")) {
+                const barW = Math.max(8, Math.round(qFontSize * 0.62));
+                const restText = pc.quality.substring(1);
+                const barGap = restText ? Math.max(2.5, Math.round(scaleFactor * 2.5)) : 0;
+                const restW = restText ? ctx.measureText(restText).width : 0;
+                wQuality = barW + barGap + restW;
+            } else {
+                wQuality = ctx.measureText(pc.quality).width;
+            }
         }
 
         let wTension = 0;
         if (pc.tensions.length > 0) {
-            ctx.font = `bold ${baseSize * 0.44}px "Oswald", "Inter", sans-serif`;
-            const tStr = pc.tensions.map(t => t.replace(/[()]/g, "")).join(" ");
-            wTension = ctx.measureText(tStr).width;
+            const tFontSize = Math.round(baseSize * 0.48);
+            ctx.font = `bold ${tFontSize}px "Oswald", "Inter", sans-serif`;
+            let curTX = 0;
+            for (let ti = 0; ti < pc.tensions.length; ti++) {
+                const t = pc.tensions[ti].replace(/[()]/g, "");
+                if (ti > 0) curTX += 3 * scaleFactor;
+                if (t.startsWith("-")) {
+                    const tBarW = Math.max(6, Math.round(tFontSize * 0.58));
+                    curTX += tBarW + Math.max(1.5, Math.round(scaleFactor * 1.5));
+                    const tRest = t.substring(1);
+                    if (tRest) curTX += ctx.measureText(tRest).width;
+                } else {
+                    curTX += ctx.measureText(t).width;
+                }
+            }
+            wTension = curTX;
         }
 
         const suffixWidth = Math.max(wQuality, wTension);
@@ -1676,11 +1699,11 @@ class LeadSheetRenderer {
 
         let wBass = 0;
         if (pc.bass) {
-            ctx.font = `bold ${baseSize * 0.60}px "Oswald", "Inter", sans-serif`;
+            ctx.font = `bold ${Math.round(baseSize * 0.62)}px "Oswald", "Inter", sans-serif`;
             const wBMain = ctx.measureText(bassMain).width;
             let wBAcc = 0;
             if (bassAcc) {
-                ctx.font = `bold ${baseSize * 0.42}px "Oswald", "Inter", sans-serif`;
+                ctx.font = `bold ${Math.round(baseSize * 0.45)}px "Oswald", "Inter", sans-serif`;
                 wBAcc = ctx.measureText(bassAcc).width + 0.8 * scaleFactor;
             }
             wBass = wBMain + wBAcc + 1.5 * scaleFactor;
@@ -1716,7 +1739,7 @@ class LeadSheetRenderer {
 
         // 1b. Root Accidental
         if (rootAcc) {
-            ctx.font = `bold ${baseSize * 0.65}px "Oswald", "Inter", sans-serif`;
+            ctx.font = `bold ${Math.round(baseSize * 0.68)}px "Oswald", "Inter", sans-serif`;
             const accY = y - baseSize * 0.16;
             ctx.fillText(rootAcc, currentX, accY);
             currentX += ctx.measureText(rootAcc).width + 1.0 * scaleFactor;
@@ -1724,22 +1747,78 @@ class LeadSheetRenderer {
 
         const suffixStartX = currentX + 1.5 * scaleFactor;
 
-        // 2. Quality
+        // 2. Quality (Crisp, bold Real Book jazz minus and quality text)
         let qualityWidth = 0;
         if (pc.quality) {
-            ctx.font = `bold ${baseSize * 0.54}px "Oswald", "Inter", sans-serif`;
-            ctx.fillText(pc.quality, suffixStartX, y);
-            qualityWidth = ctx.measureText(pc.quality).width;
+            const qFontSize = Math.round(baseSize * 0.65);
+            ctx.font = `bold ${qFontSize}px "Oswald", "Inter", sans-serif`;
+            if (pc.quality.startsWith("-")) {
+                const barW = Math.max(8, Math.round(qFontSize * 0.62));
+                const barH = Math.max(2.8, Math.round(qFontSize * 0.18));
+                const barY = Math.round(y - qFontSize * 0.36);
+                const restText = pc.quality.substring(1);
+                const barGap = restText ? Math.max(2.5, Math.round(scaleFactor * 2.5)) : 0;
+
+                // Draw prominent jazz minus bar
+                ctx.save();
+                ctx.fillStyle = color;
+                if (ctx.roundRect) {
+                    ctx.beginPath();
+                    ctx.roundRect(suffixStartX, barY - Math.round(barH / 2), barW, barH, Math.min(1.5, barH / 2));
+                    ctx.fill();
+                } else {
+                    ctx.fillRect(suffixStartX, barY - Math.round(barH / 2), barW, barH);
+                }
+                ctx.restore();
+
+                let restW = 0;
+                if (restText) {
+                    ctx.fillText(restText, suffixStartX + barW + barGap, y);
+                    restW = ctx.measureText(restText).width;
+                }
+                qualityWidth = barW + barGap + restW;
+            } else {
+                ctx.fillText(pc.quality, suffixStartX, y);
+                qualityWidth = ctx.measureText(pc.quality).width;
+            }
         }
 
-        // 3. Tension (Stacked above quality)
+        // 3. Tension (Stacked above quality with bold minus for altered tensions)
         let tensionWidth = 0;
         if (pc.tensions.length > 0) {
-            ctx.font = `bold ${baseSize * 0.44}px "Oswald", "Inter", sans-serif`;
+            const tFontSize = Math.round(baseSize * 0.48);
+            ctx.font = `bold ${tFontSize}px "Oswald", "Inter", sans-serif`;
             const tY = pc.quality ? (y - baseSize * 0.52) : (y - baseSize * 0.38);
-            const tStr = pc.tensions.map(t => t.replace(/[()]/g, "")).join(" ");
-            ctx.fillText(tStr, suffixStartX, tY);
-            tensionWidth = ctx.measureText(tStr).width;
+            let curTX = suffixStartX;
+            for (let ti = 0; ti < pc.tensions.length; ti++) {
+                const t = pc.tensions[ti].replace(/[()]/g, "");
+                if (ti > 0) curTX += 3 * scaleFactor;
+                if (t.startsWith("-")) {
+                    const tBarW = Math.max(6, Math.round(tFontSize * 0.58));
+                    const tBarH = Math.max(2.2, Math.round(tFontSize * 0.18));
+                    const tBarY = Math.round(tY - tFontSize * 0.36);
+                    ctx.save();
+                    ctx.fillStyle = color;
+                    if (ctx.roundRect) {
+                        ctx.beginPath();
+                        ctx.roundRect(curTX, tBarY - Math.round(tBarH / 2), tBarW, tBarH, Math.min(1.2, tBarH / 2));
+                        ctx.fill();
+                    } else {
+                        ctx.fillRect(curTX, tBarY - Math.round(tBarH / 2), tBarW, tBarH);
+                    }
+                    ctx.restore();
+                    curTX += tBarW + Math.max(1.5, Math.round(scaleFactor * 1.5));
+                    const tRest = t.substring(1);
+                    if (tRest) {
+                        ctx.fillText(tRest, curTX, tY);
+                        curTX += ctx.measureText(tRest).width;
+                    }
+                } else {
+                    ctx.fillText(t, curTX, tY);
+                    curTX += ctx.measureText(t).width;
+                }
+            }
+            tensionWidth = curTX - suffixStartX;
         }
 
         const suffixWidth = Math.max(qualityWidth, tensionWidth);
@@ -1756,12 +1835,12 @@ class LeadSheetRenderer {
         if (pc.bass) {
             const bY = y + baseSize * 0.12;
             currentX += 1.5 * scaleFactor;
-            ctx.font = `bold ${baseSize * 0.60}px "Oswald", "Inter", sans-serif`;
+            ctx.font = `bold ${Math.round(baseSize * 0.62)}px "Oswald", "Inter", sans-serif`;
             ctx.fillText(bassMain, currentX, bY);
             currentX += ctx.measureText(bassMain).width;
 
             if (bassAcc) {
-                ctx.font = `bold ${baseSize * 0.42}px "Oswald", "Inter", sans-serif`;
+                ctx.font = `bold ${Math.round(baseSize * 0.45)}px "Oswald", "Inter", sans-serif`;
                 const bAccY = bY - baseSize * 0.10;
                 ctx.fillText(bassAcc, currentX, bAccY);
                 currentX += ctx.measureText(bassAcc).width + 0.8 * scaleFactor;
