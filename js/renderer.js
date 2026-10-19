@@ -787,41 +787,11 @@ class LeadSheetRenderer {
         // Draw Barlines
         this.drawBarLines(ctx, measure, x, y, width, isLast, isLineStart);
 
-        // Draw Chords
-        const numChords = measure.chords.length;
-        let leftPad = (measure.repeatStart && !isLineStart ? (this.chordOnlyMode ? 35 : 25) : 12);
-        if (measure.voltaNumber > 0) leftPad += (this.chordOnlyMode ? 20 : 10);
-        if (measure.sectionLabel) leftPad += (this.chordOnlyMode ? 35 : 25);
-        const rightPad = (measure.repeatEnd ? (this.chordOnlyMode ? 35 : 25) : 8);
+        // 1. Layout Notes (Calculate note X positions, accidentals, and bounds prior to chords)
+        const infoList = [];
+        const noteStartBeats = [];
+        let measureTotalBeats = Math.max(1, measure.totalDuration || 1);
 
-        const availableWidthForChords = width - leftPad - rightPad;
-        const slotWidth = availableWidthForChords / Math.max(1, numChords);
-        const maxAllowedWidth = Math.max(15, slotWidth - 6);
-        const baseChordSize = this.chordFontSize;
-
-        for (let i = 0; i < numChords; i++) {
-            const cc = measure.chords[i];
-            const cx = x + leftPad + (i * slotWidth);
-            const cy = this.chordOnlyMode ? (y + 15) : (defaultChordBaseY - chordLift);
-
-            const transposedChord = this.getTransposedChord(cc.chord, keySF);
-            const parsed = this.parseChord(transposedChord);
-
-            const naturalWidth = this.measureChordWidth(ctx, parsed, baseChordSize);
-            let effectiveSize = baseChordSize;
-            if (naturalWidth > maxAllowedWidth && maxAllowedWidth > 20) {
-                const shrinkScale = Math.max(0.78, maxAllowedWidth / naturalWidth);
-                effectiveSize = Math.max(16, Math.round(baseChordSize * shrinkScale));
-            }
-
-            const isHigh = (this.playbackHighlightedElement === cc);
-            const renderedWidth = this.drawComplexChord(ctx, parsed, cx, cy, effectiveSize, isHigh);
-
-            const chordBounds = { left: cx - 8, top: cy - effectiveSize * 1.1, right: cx + renderedWidth + 8, bottom: cy + effectiveSize * 0.35 };
-            this.elementBoundsList.push({ bounds: chordBounds, type: 'CHORD', element: cc });
-        }
-
-        // Draw Notes & Beams
         if (!this.chordOnlyMode) {
             const tempAccState = {};
             const keyAccidentals = this.getKeyAccidentals(keySF);
@@ -889,10 +859,13 @@ class LeadSheetRenderer {
             }
             const stepScale = (sumIdealSteps > usableWidth && sumIdealSteps > 0) ? (usableWidth / sumIdealSteps) : 1.0;
 
-            const infoList = [];
+            let currentBeatAccum = 0;
             for (let k = 0; k < measure.notes.length; k++) {
                 const note = measure.notes[k];
                 if (note.duration === 0) continue;
+                noteStartBeats.push(currentBeatAccum);
+                currentBeatAccum += note.duration;
+
                 const info = {
                     note,
                     x: currentNoteX,
@@ -934,8 +907,102 @@ class LeadSheetRenderer {
                     currentNoteX += idealSteps[k] * stepScale;
                 }
             }
+            if (currentBeatAccum > 0) measureTotalBeats = Math.max(measureTotalBeats, currentBeatAccum);
+        }
 
-            // Beaming logic
+        // 2. Draw Chords (Positioned above their exact beat / note)
+        const numChords = measure.chords.length;
+        let leftPad = (measure.repeatStart && !isLineStart ? (this.chordOnlyMode ? 35 : 25) : 12);
+        if (measure.voltaNumber > 0) leftPad += (this.chordOnlyMode ? 20 : 10);
+        if (measure.sectionLabel) leftPad += (this.chordOnlyMode ? 35 : 25);
+        const rightPad = (measure.repeatEnd ? (this.chordOnlyMode ? 35 : 25) : 8);
+
+        const availableWidthForChords = width - leftPad - rightPad;
+        const baseChordSize = this.chordFontSize;
+
+        const chordPositions = [];
+        const allPosIdentical = numChords > 1 && measure.chords.every(c => Math.abs(c.position - measure.chords[0].position) < 0.001);
+
+        for (let i = 0; i < numChords; i++) {
+            const cc = measure.chords[i];
+            let rawX;
+
+            if (this.chordOnlyMode || infoList.length === 0) {
+                if (allPosIdentical) {
+                    rawX = x + leftPad + i * (availableWidthForChords / numChords);
+                } else {
+                    const ratio = Math.max(0, Math.min(1.0, cc.position / measureTotalBeats));
+                    rawX = x + leftPad + ratio * availableWidthForChords;
+                }
+            } else {
+                if (allPosIdentical) {
+                    const step = Math.max(1, Math.floor(infoList.length / numChords));
+                    const nIdx = Math.min(infoList.length - 1, i * step);
+                    rawX = infoList[nIdx].x;
+                } else {
+                    rawX = this.getChordXForBeat(cc.position, infoList, noteStartBeats, measureTotalBeats, x + leftPad, x + width - rightPad);
+                }
+            }
+            chordPositions.push(Math.max(x + leftPad, rawX));
+        }
+
+        const parsedChords = [];
+        const chordWidths = [];
+        const effectiveSizes = [];
+
+        for (let i = 0; i < numChords; i++) {
+            const cc = measure.chords[i];
+            const transposedChord = this.getTransposedChord(cc.chord, keySF);
+            const parsed = this.parseChord(transposedChord);
+            parsedChords.push(parsed);
+
+            const naturalWidth = this.measureChordWidth(ctx, parsed, baseChordSize);
+            const nextX = (i + 1 < numChords) ? chordPositions[i + 1] : (x + width - rightPad);
+            const spaceAvailable = Math.max(20, nextX - chordPositions[i] - 6);
+
+            let effectiveSize = baseChordSize;
+            if (naturalWidth > spaceAvailable && spaceAvailable > 20) {
+                const shrinkScale = Math.max(0.78, spaceAvailable / naturalWidth);
+                effectiveSize = Math.max(16, Math.round(baseChordSize * shrinkScale));
+            }
+            effectiveSizes.push(effectiveSize);
+            chordWidths.push(this.measureChordWidth(ctx, parsed, effectiveSize));
+        }
+
+        // Prevent collision left-to-right
+        for (let i = 1; i < numChords; i++) {
+            const minX = chordPositions[i - 1] + chordWidths[i - 1] + 6;
+            if (chordPositions[i] < minX) {
+                chordPositions[i] = minX;
+            }
+        }
+        // Ensure within right boundary
+        for (let i = numChords - 1; i >= 0; i--) {
+            const maxAllowedX = x + width - rightPad - chordWidths[i];
+            if (chordPositions[i] > maxAllowedX) {
+                chordPositions[i] = Math.max(x + leftPad, maxAllowedX);
+                if (i > 0 && chordPositions[i - 1] + chordWidths[i - 1] + 6 > chordPositions[i]) {
+                    chordPositions[i - 1] = Math.max(x + leftPad, chordPositions[i] - chordWidths[i - 1] - 6);
+                }
+            }
+        }
+
+        for (let i = 0; i < numChords; i++) {
+            const cc = measure.chords[i];
+            const cx = chordPositions[i];
+            const cy = this.chordOnlyMode ? (y + 15) : (defaultChordBaseY - chordLift);
+            const parsed = parsedChords[i];
+            const effectiveSize = effectiveSizes[i];
+
+            const isHigh = (this.playbackHighlightedElement === cc);
+            const renderedWidth = this.drawComplexChord(ctx, parsed, cx, cy, effectiveSize, isHigh);
+
+            const chordBounds = { left: cx - 8, top: cy - effectiveSize * 1.1, right: cx + renderedWidth + 8, bottom: cy + effectiveSize * 0.35 };
+            this.elementBoundsList.push({ bounds: chordBounds, type: 'CHORD', element: cc });
+        }
+
+        // 3. Draw Notes & Beams
+        if (!this.chordOnlyMode) {
             const isBeamed = new Array(infoList.length).fill(false);
             for (let i = 0; i < infoList.length; i++) {
                 if (isBeamed[i]) continue;
@@ -1632,6 +1699,39 @@ class LeadSheetRenderer {
             pc.quality = remaining;
         }
         return pc;
+    }
+
+    getChordXForBeat(beat, infoList, noteStartBeats, measureTotalBeats, minX, maxX) {
+        if (!infoList || infoList.length === 0) {
+            const ratio = Math.max(0, Math.min(1.0, beat / measureTotalBeats));
+            return minX + ratio * (maxX - minX);
+        }
+        // At or before first note
+        if (beat <= (noteStartBeats[0] || 0) + 0.05) {
+            return Math.max(minX, infoList[0].x);
+        }
+        // Check notes
+        for (let k = 0; k < infoList.length; k++) {
+            const sBeat = noteStartBeats[k];
+            const dur = infoList[k].note.duration;
+            const eBeat = sBeat + dur;
+
+            // Direct match with note start
+            if (Math.abs(beat - sBeat) <= 0.08) {
+                return infoList[k].x;
+            }
+
+            // Beat falls within sustained note or rest
+            if (beat > sBeat && beat < eBeat) {
+                const frac = (beat - sBeat) / Math.max(0.001, dur);
+                const nextX = (k + 1 < infoList.length) ? infoList[k + 1].x : maxX;
+                return infoList[k].x + frac * (nextX - infoList[k].x);
+            }
+        }
+        // Past the last note
+        const lastIdx = infoList.length - 1;
+        const lastX = infoList[lastIdx].x;
+        return Math.min(maxX - 20, lastX + 25);
     }
 
     measureChordWidth(ctx, pc, baseSize) {
