@@ -415,7 +415,7 @@ const MidiStyles = {
         defaultBpm: 120,
         generate(sheet, options, writer) {
             const ppq = writer.ppq;
-            const singlePassSequence = options.unrollRepeats ? MidiExporter.unrollRepeats(sheet.measures) : sheet.measures;
+            const singlePassSequence = MidiExporter.getPlaybackSequence(sheet, options);
             if (singlePassSequence.length === 0) return;
 
             const choruses = options.choruses || 1;
@@ -632,7 +632,7 @@ const MidiStyles = {
         defaultBpm: 120,
         generate(sheet, options, writer) {
             const ppq = writer.ppq;
-            const singlePass = options.unrollRepeats ? MidiExporter.unrollRepeats(sheet.measures) : sheet.measures;
+            const singlePass = MidiExporter.getPlaybackSequence(sheet, options);
             if (singlePass.length === 0) return;
 
             const choruses = options.choruses || 1;
@@ -731,7 +731,7 @@ const MidiStyles = {
         defaultBpm: 140,
         generate(sheet, options, writer) {
             const ppq = writer.ppq;
-            const singlePassSequence = options.unrollRepeats ? MidiExporter.unrollRepeats(sheet.measures) : sheet.measures;
+            const singlePassSequence = MidiExporter.getPlaybackSequence(sheet, options);
             if (singlePassSequence.length === 0) return;
 
             const choruses = options.choruses || 1;
@@ -998,7 +998,7 @@ const MidiStyles = {
         defaultBpm: 130,
         generate(sheet, options, writer) {
             const ppq = writer.ppq;
-            const singlePass = options.unrollRepeats ? MidiExporter.unrollRepeats(sheet.measures) : sheet.measures;
+            const singlePass = MidiExporter.getPlaybackSequence(sheet, options);
             if (singlePass.length === 0) return;
 
             const choruses = options.choruses || 1;
@@ -1157,7 +1157,7 @@ const MidiStyles = {
         defaultBpm: 125,
         generate(sheet, options, writer) {
             const ppq = writer.ppq;
-            const singlePass = options.unrollRepeats ? MidiExporter.unrollRepeats(sheet.measures) : sheet.measures;
+            const singlePass = MidiExporter.getPlaybackSequence(sheet, options);
             if (singlePass.length === 0) return;
 
             const choruses = options.choruses || 1;
@@ -1379,7 +1379,7 @@ const MidiStyles = {
         defaultBpm: 210,
         generate(sheet, options, writer) {
             const ppq = writer.ppq;
-            const singlePass = options.unrollRepeats ? MidiExporter.unrollRepeats(sheet.measures) : sheet.measures;
+            const singlePass = MidiExporter.getPlaybackSequence(sheet, options);
             if (singlePass.length === 0) return;
 
             const choruses = options.choruses || 1;
@@ -1482,7 +1482,7 @@ const MidiStyles = {
         defaultBpm: 65,
         generate(sheet, options, writer) {
             const ppq = writer.ppq;
-            const singlePass = options.unrollRepeats ? MidiExporter.unrollRepeats(sheet.measures) : sheet.measures;
+            const singlePass = MidiExporter.getPlaybackSequence(sheet, options);
             if (singlePass.length === 0) return;
 
             const choruses = options.choruses || 1;
@@ -1653,7 +1653,7 @@ const MidiStyles = {
         defaultBpm: 120,
         generate(sheet, options, writer) {
             const ppq = writer.ppq;
-            const singlePass = options.unrollRepeats ? MidiExporter.unrollRepeats(sheet.measures) : sheet.measures;
+            const singlePass = MidiExporter.getPlaybackSequence(sheet, options);
             if (singlePass.length === 0) return;
 
             const choruses = options.choruses || 1;
@@ -1788,6 +1788,52 @@ class MidiExporter {
             }
         }
         return sequence;
+    }
+
+    static resolveChords(measures, defaultRoot = 'C') {
+        if (!measures || measures.length === 0) return [];
+        let initialChord = null;
+        for (const m of measures) {
+            if (m.chords && m.chords.length > 0) {
+                const c = m.chords[0].chord.trim();
+                if (c.toUpperCase() !== 'N.C.' && c.toUpperCase() !== 'NC') {
+                    initialChord = c;
+                    break;
+                }
+            }
+        }
+        if (!initialChord) initialChord = defaultRoot;
+
+        let currentChord = null;
+        return measures.map(m => {
+            const cloned = Object.assign({}, m);
+            if (m.chords && m.chords.length > 0) {
+                const hasBeatZero = m.chords.some(c => c.position <= 0.001);
+                if (!hasBeatZero && currentChord && currentChord.toUpperCase() !== 'N.C.' && currentChord.toUpperCase() !== 'NC') {
+                    cloned.chords = [{ chord: currentChord, position: 0, isInherited: true }, ...m.chords];
+                } else {
+                    cloned.chords = [...m.chords];
+                }
+                const last = cloned.chords[cloned.chords.length - 1].chord.trim();
+                currentChord = last;
+            } else {
+                const chordToInherit = currentChord || initialChord;
+                if (chordToInherit && chordToInherit.toUpperCase() !== 'N.C.' && chordToInherit.toUpperCase() !== 'NC') {
+                    cloned.chords = [{ chord: chordToInherit, position: 0, isInherited: true }];
+                    currentChord = chordToInherit;
+                } else {
+                    cloned.chords = [];
+                }
+            }
+            return cloned;
+        });
+    }
+
+    static getPlaybackSequence(sheet, options = {}) {
+        if (!sheet || !sheet.measures) return [];
+        const unroll = (options.unrollRepeats !== undefined) ? options.unrollRepeats : true;
+        const rawSeq = unroll ? this.unrollRepeats(sheet.measures) : sheet.measures;
+        return this.resolveChords(rawSeq, sheet.key || 'C');
     }
 
     static exportMidi(sheet, options = {}) {

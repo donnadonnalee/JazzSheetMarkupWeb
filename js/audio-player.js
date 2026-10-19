@@ -195,6 +195,7 @@ class AudioPlayer {
         const events = [];
         const secondsPerBeat = 60.0 / Math.max(20, this.bpm);
         let currentTime = 0;
+        let lastChordStr = null;
 
         for (let i = 0; i < sequence.length; i++) {
             const m = sequence[i];
@@ -204,13 +205,23 @@ class AudioPlayer {
                 measureTimings.push({ measure: m, sequenceIndex: i, startTime: mStart, endTime: mEnd });
             }
 
-            // 1. Chords
-            for (let cIdx = 0; cIdx < m.chords.length; cIdx++) {
-                const cc = m.chords[cIdx];
+            // 1. Chords (Inherit from previous measure if not specified)
+            let chordsToPlay = (m.chords && m.chords.length > 0) ? m.chords : [];
+            if (chordsToPlay.length === 0 && lastChordStr && lastChordStr.toUpperCase() !== 'N.C.' && lastChordStr.toUpperCase() !== 'NC') {
+                chordsToPlay = [{ chord: lastChordStr, position: 0, isInherited: true }];
+            } else if (chordsToPlay.length > 0 && chordsToPlay[0].position > 0.001 && lastChordStr && lastChordStr.toUpperCase() !== 'N.C.' && lastChordStr.toUpperCase() !== 'NC') {
+                chordsToPlay = [{ chord: lastChordStr, position: 0, isInherited: true }, ...chordsToPlay];
+            }
+            if (chordsToPlay.length > 0) {
+                lastChordStr = chordsToPlay[chordsToPlay.length - 1].chord.trim();
+            }
+
+            for (let cIdx = 0; cIdx < chordsToPlay.length; cIdx++) {
+                const cc = chordsToPlay[cIdx];
                 const eventStart = currentTime + cc.position * secondsPerBeat;
                 let eventDuration = (m.totalDuration - cc.position) * secondsPerBeat;
-                for (let nextIdx = cIdx + 1; nextIdx < m.chords.length; nextIdx++) {
-                    const nextCc = m.chords[nextIdx];
+                for (let nextIdx = cIdx + 1; nextIdx < chordsToPlay.length; nextIdx++) {
+                    const nextCc = chordsToPlay[nextIdx];
                     if (nextCc.position > cc.position) {
                         eventDuration = (nextCc.position - cc.position) * secondsPerBeat;
                         break;
