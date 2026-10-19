@@ -35,10 +35,9 @@ class Forum {
      */
     async fetchSongs(orderByField = 'timestamp', orderDirection = 'desc') {
         const snapshot = await this.songsCollection.orderBy(orderByField, orderDirection).get();
-        return snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        }));
+        return snapshot.docs
+            .map(doc => ({ id: doc.id, ...doc.data() }))
+            .filter(item => !item.isRoom && !item.id.startsWith('room_'));
     }
 
     /**

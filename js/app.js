@@ -48,6 +48,7 @@ class AppController {
         this.initPlayerCallbacks();
         this.initForum();
         this.initMidiExport();
+        this.initSessionRoom();
         this.bindEvents();
         this.bindResizerEvents();
 
@@ -56,6 +57,15 @@ class AppController {
 
         // Load Danny Boy with all 3 versions as default
         this.loadDefaultSong();
+
+        // Auto-join room if 'room' query parameter is present in URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const roomParam = urlParams.get('room');
+        if (roomParam && this.sessionRoom) {
+            setTimeout(() => {
+                this.sessionRoom.connect(roomParam, this.el.abcInput.value);
+            }, 120);
+        }
     }
 
     initForum() {
@@ -147,7 +157,31 @@ class AppController {
             // Version Tabs Elements
             versionTabBar: document.getElementById("versionTabBar"),
             versionTabsContainer: document.getElementById("versionTabsContainer"),
-            btnAddVersion: document.getElementById("btnAddVersion")
+            btnAddVersion: document.getElementById("btnAddVersion"),
+            // Share Edit & Chat Elements
+            btnShareEdit: document.getElementById("btnShareEdit"),
+            shareStatusText: document.getElementById("shareStatusText"),
+            btnShareChat: document.getElementById("btnShareChat"),
+            chatBadge: document.getElementById("chatBadge"),
+            syncIndicator: document.getElementById("syncIndicator"),
+            shareEditModal: document.getElementById("shareEditModal"),
+            btnCloseShareModal: document.getElementById("btnCloseShareModal"),
+            btnCancelShare: document.getElementById("btnCancelShare"),
+            shareRoomIdInput: document.getElementById("shareRoomIdInput"),
+            btnGenNewRoomId: document.getElementById("btnGenNewRoomId"),
+            shareUserNameInput: document.getElementById("shareUserNameInput"),
+            shareLinkGroup: document.getElementById("shareLinkGroup"),
+            shareUrlDisplay: document.getElementById("shareUrlDisplay"),
+            btnCopyShareUrl: document.getElementById("btnCopyShareUrl"),
+            shareRoomStatusText: document.getElementById("shareRoomStatusText"),
+            btnConnectShare: document.getElementById("btnConnectShare"),
+            btnDisconnectShare: document.getElementById("btnDisconnectShare"),
+            shareChatPanel: document.getElementById("shareChatPanel"),
+            chatRoomTitle: document.getElementById("chatRoomTitle"),
+            btnCloseChat: document.getElementById("btnCloseChat"),
+            chatMessagesContainer: document.getElementById("chatMessagesContainer"),
+            chatForm: document.getElementById("chatForm"),
+            chatInput: document.getElementById("chatInput")
         };
     }
 
@@ -215,6 +249,9 @@ class AppController {
                 this.semitoneShift = 0;
                 this.updateTransposeDisplay();
                 this.reparseAndRender();
+                if (this.sessionRoom && this.sessionRoom.isConnected) {
+                    this.sessionRoom.sendLocalMarkup(currentText);
+                }
             }, 120);
         });
 
@@ -594,6 +631,265 @@ class AppController {
                 } catch (err) {
                     console.error('MIDI export error:', err);
                     this.showToast('⚠️ MIDIエクスポートに失敗しました: ' + err.message);
+                }
+            });
+        }
+    }
+
+    initSessionRoom() {
+        if (typeof SessionRoom === 'undefined' || !window.db) {
+            console.warn("SessionRoom or Firestore not available.");
+            return;
+        }
+
+        this.sessionRoom = new SessionRoom(window.db, window.userUuid);
+
+        // 1. Remote Markup Received from Collaborator
+        this.sessionRoom.onMarkupReceived = (markup, updatedBy) => {
+            if (this.el.abcInput.value === markup) return;
+
+            const isFocused = (document.activeElement === this.el.abcInput);
+            const selStart = this.el.abcInput.selectionStart;
+            const selEnd = this.el.abcInput.selectionEnd;
+
+            this.el.abcInput.value = markup;
+            this.originalAbc = markup;
+
+            if (isFocused) {
+                try {
+                    this.el.abcInput.setSelectionRange(
+                        Math.min(selStart, markup.length),
+                        Math.min(selEnd, markup.length)
+                    );
+                } catch (e) {}
+            }
+
+            if (this.currentTuneIndex >= 0 && this.currentTuneIndex < this.currentTunes.length) {
+                this.currentTunes[this.currentTuneIndex].content = markup;
+                MultiTuneHelper.refreshTuneMetadata(this.currentTunes[this.currentTuneIndex]);
+                this.updateCurrentTabTitle();
+            }
+
+            this.semitoneShift = 0;
+            this.updateTransposeDisplay();
+            this.reparseAndRender();
+            this.showToast(`🔄 Synced from ${updatedBy}`);
+        };
+
+        // 2. Status Changed (Connect / Disconnect)
+        this.sessionRoom.onStatusChanged = (isConnected, roomId) => {
+            if (this.el.btnShareEdit) {
+                this.el.btnShareEdit.classList.toggle('active', isConnected);
+            }
+            if (this.el.shareStatusText) {
+                this.el.shareStatusText.textContent = isConnected ? roomId : 'Share Edit';
+            }
+            if (this.el.btnShareChat) {
+                this.el.btnShareChat.classList.toggle('hidden', !isConnected);
+            }
+            if (this.el.shareChatPanel && !isConnected) {
+                this.el.shareChatPanel.classList.add('hidden');
+            }
+            if (this.el.chatRoomTitle) {
+                this.el.chatRoomTitle.textContent = isConnected ? `Room: ${roomId}` : 'Room Chat';
+            }
+            if (this.el.shareLinkGroup) {
+                this.el.shareLinkGroup.style.display = isConnected ? 'block' : 'none';
+            }
+            if (this.el.btnDisconnectShare) {
+                this.el.btnDisconnectShare.style.display = isConnected ? 'inline-block' : 'none';
+            }
+            if (this.el.btnConnectShare) {
+                this.el.btnConnectShare.textContent = isConnected ? 'Switch Room' : 'Join / Start Room';
+            }
+            if (this.el.shareUrlDisplay && isConnected) {
+                this.el.shareUrlDisplay.value = this.sessionRoom.getShareUrl();
+            }
+            if (this.el.shareRoomStatusText) {
+                if (isConnected) {
+                    this.el.shareRoomStatusText.textContent = `🟢 Connected to room "${roomId}". Anyone with the invite link can edit and chat in realtime!`;
+                    this.el.shareRoomStatusText.style.color = '#10b981';
+                } else {
+                    this.el.shareRoomStatusText.textContent = 'Enter a room name to join or create. Anyone with the link can edit the lead sheet in realtime.';
+                    this.el.shareRoomStatusText.style.color = 'var(--text-secondary)';
+                }
+            }
+        };
+
+        // 3. Messages Updated
+        this.sessionRoom.onMessagesUpdated = (messages, unreadCount) => {
+            this.renderChatMessages(messages);
+            if (this.el.chatBadge) {
+                if (unreadCount > 0) {
+                    this.el.chatBadge.textContent = unreadCount > 9 ? '9+' : unreadCount;
+                    this.el.chatBadge.classList.remove('hidden');
+                } else {
+                    this.el.chatBadge.classList.add('hidden');
+                }
+            }
+        };
+
+        // 4. Sync State Indicator
+        this.sessionRoom.onSyncState = (isSyncing) => {
+            if (this.el.syncIndicator) {
+                this.el.syncIndicator.classList.toggle('hidden', !isSyncing);
+            }
+        };
+
+        // Bind Share Edit UI Events
+        this.bindShareEditEvents();
+    }
+
+    renderChatMessages(messages) {
+        if (!this.el.chatMessagesContainer) return;
+        this.el.chatMessagesContainer.innerHTML = '';
+        if (!messages || messages.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'chat-msg system';
+            empty.textContent = 'No messages yet. Say hello!';
+            this.el.chatMessagesContainer.appendChild(empty);
+            return;
+        }
+
+        messages.forEach(msg => {
+            const div = document.createElement('div');
+            const isSelf = (msg.senderUuid === this.sessionRoom.userUuid) || (msg.sender === this.sessionRoom.userName);
+            const isSystem = msg.sender === 'System';
+
+            if (isSystem) {
+                div.className = 'chat-msg system';
+                div.textContent = msg.text;
+            } else {
+                div.className = `chat-msg ${isSelf ? 'self' : 'other'}`;
+                const senderDiv = document.createElement('div');
+                senderDiv.className = 'chat-sender';
+                const timeStr = msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+                senderDiv.textContent = `${msg.sender} ${timeStr}`;
+                const bubble = document.createElement('div');
+                bubble.className = 'chat-bubble';
+                bubble.textContent = msg.text;
+                div.appendChild(senderDiv);
+                div.appendChild(bubble);
+            }
+            this.el.chatMessagesContainer.appendChild(div);
+        });
+
+        // Auto-scroll to bottom
+        this.el.chatMessagesContainer.scrollTop = this.el.chatMessagesContainer.scrollHeight;
+    }
+
+    bindShareEditEvents() {
+        if (this.el.btnShareEdit) {
+            this.el.btnShareEdit.addEventListener('click', () => {
+                if (this.el.shareRoomIdInput) {
+                    if (this.sessionRoom && this.sessionRoom.isConnected) {
+                        this.el.shareRoomIdInput.value = this.sessionRoom.currentRoomId;
+                    } else if (!this.el.shareRoomIdInput.value) {
+                        this.el.shareRoomIdInput.value = this.sessionRoom.generateRoomId();
+                    }
+                }
+                if (this.el.shareUserNameInput) {
+                    this.el.shareUserNameInput.value = this.sessionRoom.userName;
+                }
+                if (this.el.shareUrlDisplay && this.sessionRoom && this.sessionRoom.isConnected) {
+                    this.el.shareUrlDisplay.value = this.sessionRoom.getShareUrl();
+                }
+                this.el.shareEditModal.classList.remove('hidden');
+            });
+        }
+
+        if (this.el.btnCloseShareModal) {
+            this.el.btnCloseShareModal.addEventListener('click', () => {
+                this.el.shareEditModal.classList.add('hidden');
+            });
+        }
+
+        if (this.el.btnCancelShare) {
+            this.el.btnCancelShare.addEventListener('click', () => {
+                this.el.shareEditModal.classList.add('hidden');
+            });
+        }
+
+        this.el.shareEditModal.addEventListener('click', (e) => {
+            if (e.target === this.el.shareEditModal) {
+                this.el.shareEditModal.classList.add('hidden');
+            }
+        });
+
+        if (this.el.btnGenNewRoomId) {
+            this.el.btnGenNewRoomId.addEventListener('click', () => {
+                this.el.shareRoomIdInput.value = this.sessionRoom.generateRoomId();
+            });
+        }
+
+        if (this.el.btnCopyShareUrl) {
+            this.el.btnCopyShareUrl.addEventListener('click', () => {
+                const url = this.el.shareUrlDisplay.value || this.sessionRoom.getShareUrl(this.el.shareRoomIdInput.value);
+                navigator.clipboard.writeText(url).then(() => {
+                    this.showToast('📋 Invite link copied to clipboard!');
+                }).catch(() => {
+                    this.showToast('Could not copy link.');
+                });
+            });
+        }
+
+        if (this.el.btnConnectShare) {
+            this.el.btnConnectShare.addEventListener('click', async () => {
+                const roomId = (this.el.shareRoomIdInput.value || '').trim();
+                const userName = (this.el.shareUserNameInput.value || '').trim();
+                if (!roomId) {
+                    this.showToast('Please enter a room name.');
+                    return;
+                }
+                if (userName) {
+                    this.sessionRoom.setUserName(userName);
+                }
+
+                try {
+                    await this.sessionRoom.connect(roomId, this.el.abcInput.value);
+                    this.el.shareEditModal.classList.add('hidden');
+                    this.showToast(`Joined session room: ${roomId}`);
+                } catch (err) {
+                    this.showToast('Connection error: ' + err.message);
+                }
+            });
+        }
+
+        if (this.el.btnDisconnectShare) {
+            this.el.btnDisconnectShare.addEventListener('click', () => {
+                this.sessionRoom.disconnect();
+                this.el.shareEditModal.classList.add('hidden');
+                this.showToast('Left session room. Back to solo mode.');
+            });
+        }
+
+        if (this.el.btnShareChat) {
+            this.el.btnShareChat.addEventListener('click', () => {
+                const isHidden = this.el.shareChatPanel.classList.toggle('hidden');
+                this.sessionRoom.setChatOpen(!isHidden);
+                if (!isHidden && this.el.chatInput) {
+                    this.el.chatInput.focus();
+                }
+            });
+        }
+
+        if (this.el.btnCloseChat) {
+            this.el.btnCloseChat.addEventListener('click', () => {
+                this.el.shareChatPanel.classList.add('hidden');
+                this.sessionRoom.setChatOpen(false);
+            });
+        }
+
+        if (this.el.chatForm) {
+            this.el.chatForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const text = (this.el.chatInput.value || '').trim();
+                if (!text) return;
+                this.el.chatInput.value = '';
+                try {
+                    await this.sessionRoom.sendChatMessage(text);
+                } catch (err) {
+                    this.showToast('Failed to send message: ' + err.message);
                 }
             });
         }

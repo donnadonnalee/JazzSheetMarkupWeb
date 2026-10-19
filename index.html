@@ -68,6 +68,19 @@
                 <div class="editor-wrapper">
                     <textarea id="abcInput" spellcheck="false" placeholder="Enter ABC notation here..."></textarea>
                 </div>
+                <div class="editor-footer">
+                    <div class="editor-footer-left">
+                        <button id="btnShareEdit" class="btn-share-edit" title="リアルタイム共同編集ルーム">
+                            <span class="share-dot"></span> <span id="shareStatusText">Share Edit</span>
+                        </button>
+                        <button id="btnShareChat" class="btn-share-chat hidden" title="セッションチャットを開く">
+                            💬 Chat <span id="chatBadge" class="chat-badge hidden">0</span>
+                        </button>
+                    </div>
+                    <div class="editor-footer-right">
+                        <span id="syncIndicator" class="sync-indicator hidden">☁️ Syncing...</span>
+                    </div>
+                </div>
             </section>
 
             <!-- Draggable Splitter Handle -->
@@ -308,6 +321,65 @@
         </div>
     </div>
 
+    <!-- Share Edit Modal (Realtime Collaboration Room) -->
+    <div id="shareEditModal" class="modal-overlay hidden">
+        <div class="modal-card modal-card-sm">
+            <div class="modal-header">
+                <div class="modal-title-wrap">
+                    <span class="modal-icon">🔗</span>
+                    <h2>Share Edit (Realtime Room)</h2>
+                </div>
+                <button class="btn-close" id="btnCloseShareModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="shareRoomIdInput">Room ID / Name:</label>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="text" id="shareRoomIdInput" class="styled-input" placeholder="e.g. jam-7k2x" spellcheck="false" style="font-family: monospace; font-weight: 600; flex: 1;">
+                        <button id="btnGenNewRoomId" class="btn btn-tool" title="Generate Random Room ID">🎲 New</button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="shareUserNameInput">Your Nickname:</label>
+                    <input type="text" id="shareUserNameInput" class="styled-input" placeholder="e.g. SaxCat_42" maxlength="24">
+                </div>
+                <div class="form-group" id="shareLinkGroup" style="display: none;">
+                    <label>Invite Link (Send to friends):</label>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="text" id="shareUrlDisplay" class="styled-input" readonly style="font-size: 0.8rem; background: var(--bg-page); flex: 1;">
+                        <button id="btnCopyShareUrl" class="btn btn-tool" title="Copy to clipboard">📋 Copy</button>
+                    </div>
+                </div>
+                <p id="shareRoomStatusText" class="form-note" style="margin-top: 6px; font-size: 0.8rem; color: var(--text-secondary);">
+                    Enter a room name to join or create. Anyone with the link can edit the lead sheet in realtime.
+                </p>
+                <div class="modal-actions" style="margin-top: 16px; display: flex; gap: 8px; justify-content: flex-end;">
+                    <button id="btnDisconnectShare" class="btn btn-danger" style="display: none;">Leave Room</button>
+                    <button id="btnConnectShare" class="btn btn-primary" style="font-weight: 600;">Join / Start Room</button>
+                    <button id="btnCancelShare" class="btn btn-tool">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating Mini-Chat Panel -->
+    <div id="shareChatPanel" class="share-chat-panel hidden">
+        <div class="chat-header">
+            <div class="chat-title-wrap">
+                <span class="chat-dot"></span>
+                <span id="chatRoomTitle" class="chat-room-title">Room Chat</span>
+            </div>
+            <button id="btnCloseChat" class="btn-chat-close">&times;</button>
+        </div>
+        <div id="chatMessagesContainer" class="chat-messages-container">
+            <!-- Messages injected dynamically -->
+        </div>
+        <form id="chatForm" class="chat-input-row">
+            <input type="text" id="chatInput" placeholder="Message to room..." maxlength="200" autocomplete="off">
+            <button type="submit" id="btnSendChat" class="btn-send-chat">Send</button>
+        </form>
+    </div>
+
     <!-- Toast Notification -->
     <div id="toast" class="toast hidden"></div>
 
@@ -316,15 +388,16 @@
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
     <!-- Application Scripts -->
-    <script src="js/models.js?v=19"></script>
-    <script src="js/multi-tune-helper.js?v=19"></script>
-    <script src="js/parser.js?v=19"></script>
-    <script src="js/abc-converter.js?v=19"></script>
-    <script src="js/renderer.js?v=19"></script>
-    <script src="js/firebase-config.js?v=19"></script>
-    <script src="js/forum.js?v=19"></script>
-    <script src="js/midi-exporter.js?v=19"></script>
-    <script src="js/audio-player.js?v=19"></script>
-    <script src="js/app.js?v=19"></script>
+    <script src="js/models.js?v=20"></script>
+    <script src="js/multi-tune-helper.js?v=20"></script>
+    <script src="js/parser.js?v=20"></script>
+    <script src="js/abc-converter.js?v=20"></script>
+    <script src="js/renderer.js?v=20"></script>
+    <script src="js/firebase-config.js?v=20"></script>
+    <script src="js/forum.js?v=20"></script>
+    <script src="js/midi-exporter.js?v=20"></script>
+    <script src="js/session-room.js?v=20"></script>
+    <script src="js/audio-player.js?v=20"></script>
+    <script src="js/app.js?v=20"></script>
 </body>
 </html>
