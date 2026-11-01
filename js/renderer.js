@@ -1003,6 +1003,7 @@ class LeadSheetRenderer {
 
         // 3. Draw Notes & Beams
         if (!this.chordOnlyMode) {
+            const effRx = this.getEffectiveNoteRx();
             const isBeamed = new Array(infoList.length).fill(false);
             for (let i = 0; i < infoList.length; i++) {
                 if (isBeamed[i]) continue;
